@@ -67,7 +67,7 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
 
   useEffect(() => {
     if (open && inputRef.current) {
-      inputRef.current.focus()
+      setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [open])
 
@@ -77,37 +77,49 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
   )
 
   return (
-    <div className="relative">
+    <>
       <button
         onClick={() => {
-          setOpen(!open)
+          setOpen(true)
           setSearch('')
         }}
-        className="text-xs bg-yellow-600 text-white font-bold px-2 py-1 rounded active:bg-yellow-500 transition-colors"
+        className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-3 py-1.5 rounded-full border border-yellow-500/30 active:bg-yellow-500/30 transition-colors"
       >
         {base} / USDT ▾
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-h-80 flex flex-col">
-          <div className="p-2 border-b border-gray-700">
+        <div className="fixed inset-0 z-50 bg-[#141821] flex flex-col">
+          {/* Header with search */}
+          <div className="bg-[#1a1f2e] px-4 pt-4 pb-3">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white font-bold text-base">Seleccionar Moneda</h2>
+              <button
+                onClick={() => setOpen(false)}
+                className="text-gray-400 active:text-white text-lg px-2"
+              >
+                ✕
+              </button>
+            </div>
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar moneda..."
-              className="w-full bg-gray-700 text-white text-xs rounded px-2 py-1.5 border border-gray-600 outline-none focus:border-blue-500"
+              className="w-full bg-[#1e2536] text-white text-sm rounded-xl px-4 py-2.5 border border-gray-700 outline-none focus:border-yellow-500/50 placeholder-gray-500"
             />
           </div>
-          <div className="overflow-y-auto flex-1">
+
+          {/* List */}
+          <div className="flex-1 overflow-y-auto px-4 py-2">
             {isPending && (
-              <div className="text-xs text-gray-400 text-center py-4">
+              <div className="text-sm text-gray-500 text-center py-8">
                 Cargando...
               </div>
             )}
             {symbols.length === 0 && !isPending && (
-              <div className="text-xs text-gray-400 text-center py-4">
+              <div className="text-sm text-gray-500 text-center py-8">
                 Cargando monedas...
               </div>
             )}
@@ -118,31 +130,30 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
                   onSymbolChange(s.symbol)
                   setOpen(false)
                 }}
-                className={`w-full text-left text-xs px-3 py-2 flex items-center gap-2 transition-colors ${
+                className={`w-full text-left text-sm px-3 py-3 flex items-center gap-3 rounded-xl mb-0.5 transition-colors ${
                   s.symbol === symbol
-                    ? 'bg-yellow-600 text-white font-bold'
-                    : 'text-gray-300 active:bg-gray-700'
+                    ? 'bg-yellow-500/15 text-yellow-400'
+                    : 'text-gray-300 active:bg-[#1e2536]'
                 }`}
               >
-                <span className="text-gray-500 w-5 text-right font-mono">
+                <span className="text-gray-600 w-6 text-right font-mono text-xs">
                   {i + 1}
                 </span>
-                <span className="font-semibold">{s.base}</span>
-                <span className="text-gray-500">/ USDT</span>
+                <span className="font-bold">{s.base}</span>
+                <span className="text-gray-600 text-xs">/ USDT</span>
+                {s.symbol === symbol && (
+                  <span className="ml-auto text-yellow-400 text-xs">●</span>
+                )}
               </button>
             ))}
             {symbols.length > 0 && filtered.length === 0 && (
-              <div className="text-xs text-gray-500 text-center py-4">
+              <div className="text-sm text-gray-500 text-center py-8">
                 No se encontró &quot;{search}&quot;
               </div>
             )}
           </div>
         </div>
       )}
-
-      {open && (
-        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-      )}
-    </div>
+    </>
   )
 }
