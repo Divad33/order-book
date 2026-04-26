@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useOrderBook } from './hooks/useOrderBook'
-import { useOrderBookFetch, type FetchSource } from './hooks/useOrderBookFetch'
+import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { BlockCard } from './components/BlockCard'
 import { FetchPanel } from './components/FetchPanel'
@@ -19,8 +19,7 @@ function App() {
     loadPrices,
   } = useOrderBook()
 
-  const [source, setSource] = useState<FetchSource>('binance-futures')
-  const { fetchOrderBook, loading, error } = useOrderBookFetch(source)
+  const { fetchOrderBook, loading, error } = useOrderBookFetch()
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -46,17 +45,15 @@ function App() {
         onFetch={handleFetch}
         loading={loading}
         error={error}
-        source={source}
-        onSourceChange={setSource}
       />
 
-      {/* Entry Point Banner */}
-      <div className="bg-green-700 px-4 py-3 border-b border-green-600">
-        <div className="text-xs font-semibold uppercase tracking-wider text-green-200 mb-0.5">
+      {/* Punto de Entrada - yellow banner with black text */}
+      <div className="bg-yellow-500 px-4 py-3 border-b border-yellow-600">
+        <div className="text-xs font-semibold uppercase tracking-wider text-black/70 mb-0.5">
           Punto de Entrada
         </div>
-        <div className="text-2xl font-bold tabular-nums text-white">
-          {computed.entryPoint.toLocaleString(undefined, {
+        <div className="text-2xl font-bold tabular-nums text-black">
+          {computed.entryPoint2.toLocaleString(undefined, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
@@ -84,15 +81,6 @@ function App() {
           label="Bloque Tope Long"
           value={computed.bloqueTopeLong}
           variant="long"
-        />
-      </div>
-
-      {/* Second Entry Point */}
-      <div className="mx-3 mb-3">
-        <BlockCard
-          label="Punto de Entrada (Alt)"
-          value={computed.entryPoint2}
-          variant="entry"
         />
       </div>
 
