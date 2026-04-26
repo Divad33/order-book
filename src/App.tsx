@@ -1,6 +1,6 @@
-import { useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useOrderBook } from './hooks/useOrderBook'
-import { useOrderBookFetch } from './hooks/useOrderBookFetch'
+import { useOrderBookFetch, type FetchSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { BlockCard } from './components/BlockCard'
 import { FetchPanel } from './components/FetchPanel'
@@ -19,7 +19,8 @@ function App() {
     loadPrices,
   } = useOrderBook()
 
-  const { fetchOrderBook, loading, error } = useOrderBookFetch()
+  const [source, setSource] = useState<FetchSource>('binance-futures')
+  const { fetchOrderBook, loading, error } = useOrderBookFetch(source)
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -45,6 +46,8 @@ function App() {
         onFetch={handleFetch}
         loading={loading}
         error={error}
+        source={source}
+        onSourceChange={setSource}
       />
 
       {/* Entry Point Banner */}
