@@ -45,7 +45,7 @@ export function useOrderBookFetch() {
 
     try {
       const res = await fetch(
-        'https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=1000',
+        'https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5000',
       )
       if (!res.ok) throw new Error(`Binance error: ${res.status}`)
 
