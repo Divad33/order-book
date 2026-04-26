@@ -1,6 +1,9 @@
+import { useState, useCallback } from 'react'
 import { useOrderBook } from './hooks/useOrderBook'
+import { useOrderBookFetch, type FetchSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { BlockCard } from './components/BlockCard'
+import { FetchPanel } from './components/FetchPanel'
 
 function App() {
   const {
@@ -13,7 +16,23 @@ function App() {
     addLongPrice,
     removeShortPrice,
     removeLongPrice,
+    loadPrices,
   } = useOrderBook()
+
+  const [source, setSource] = useState<FetchSource>('okx')
+  const [coinglassApiKey, setCoinglassApiKey] = useState('')
+
+  const { fetchOrderBook, loading, error } = useOrderBookFetch({
+    source,
+    coinglassApiKey,
+  })
+
+  const handleFetch = useCallback(async () => {
+    const result = await fetchOrderBook()
+    if (result) {
+      loadPrices(result.shortPrices, result.longPrices)
+    }
+  }, [fetchOrderBook, loadPrices])
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
@@ -26,6 +45,17 @@ function App() {
           BTC / USDT
         </span>
       </header>
+
+      {/* Fetch Panel */}
+      <FetchPanel
+        onFetch={handleFetch}
+        loading={loading}
+        error={error}
+        source={source}
+        onSourceChange={setSource}
+        coinglassApiKey={coinglassApiKey}
+        onCoinglassApiKeyChange={setCoinglassApiKey}
+      />
 
       {/* Entry Point Banner */}
       <div className="bg-green-700 px-4 py-3 border-b border-green-600">

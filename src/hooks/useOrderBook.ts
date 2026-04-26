@@ -123,6 +123,13 @@ export function useOrderBook() {
     }
   }, [state.shortPrices, state.longPrices])
 
+  const loadPrices = useCallback(
+    (shortPrices: number[], longPrices: number[]) => {
+      setState({ shortPrices, longPrices })
+    },
+    [],
+  )
+
   return {
     ...state,
     computed,
@@ -132,5 +139,6 @@ export function useOrderBook() {
     addLongPrice,
     removeShortPrice,
     removeLongPrice,
+    loadPrices,
   }
 }
