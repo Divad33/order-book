@@ -218,31 +218,7 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
       ctx.fillText(label, x, h - 4)
     }
 
-    // Current price line (from last candle, shown when no overlay PRECIO line)
-    if (visible.length > 0 && (!overlayLines || !overlayLines.some(l => l.label === 'PRECIO'))) {
-      const lastK = visible[visible.length - 1]
-      const y = priceToY(lastK.close)
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 1
-      ctx.setLineDash([4, 3])
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(chartW, y)
-      ctx.stroke()
-      ctx.setLineDash([])
-
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(chartW, y - 8, rightPad, 16)
-      ctx.fillStyle = '#000'
-      ctx.font = 'bold 9px monospace'
-      ctx.textAlign = 'right'
-      const pStr = lastK.close >= 1
-        ? lastK.close.toLocaleString(undefined, { maximumFractionDigits: 2 })
-        : lastK.close.toPrecision(5)
-      ctx.fillText(pStr, w - 4, y + 3)
-    }
-
-    // Overlay lines (5 points + current price)
+    // Overlay lines (5 order book levels)
     if (overlayLines && overlayLines.length > 0) {
       for (const line of overlayLines) {
         if (line.price < minP || line.price > maxP) continue

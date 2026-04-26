@@ -165,7 +165,7 @@ function App() {
 
   const sourceLabel = dataSource === 'futures' ? 'Futures' : 'Spot'
 
-  // Build overlay lines for the chart (5 points + current price)
+  // Build overlay lines for the chart (5 order book levels)
   const chartOverlayLines = useMemo<OverlayLine[]>(() => {
     const lines: OverlayLine[] = []
     if (computed.bloqueTopeShort > 0) {
@@ -183,11 +183,8 @@ function App() {
     if (computed.bloqueTopeLong > 0) {
       lines.push({ price: computed.bloqueTopeLong, color: '#22c55e', label: 'T.LONG' })
     }
-    if (currentPrice !== null && currentPrice > 0) {
-      lines.push({ price: currentPrice, color: '#ffffff', label: 'PRECIO' })
-    }
     return lines
-  }, [computed.bloqueTopeShort, computed.bloqueDeShort, computed.entryPoint2, computed.bloqueDeLong, computed.bloqueTopeLong, currentPrice])
+  }, [computed.bloqueTopeShort, computed.bloqueDeShort, computed.entryPoint2, computed.bloqueDeLong, computed.bloqueTopeLong])
 
   // ─── Tab: Order Book ─────────────────────────────
   const renderOrderBook = () => (
