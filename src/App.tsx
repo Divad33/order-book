@@ -7,6 +7,7 @@ import { BlockCard } from './components/BlockCard'
 import { FetchPanel } from './components/FetchPanel'
 import { SymbolSelector } from './components/SymbolSelector'
 import { HistoryPanel } from './components/HistoryPanel'
+import { ChartScreen } from './components/ChartScreen'
 
 const AUTO_REFRESH_INTERVAL = 30_000
 
@@ -41,6 +42,7 @@ function App() {
     'above',
   )
   const [showAlertForm, setShowAlertForm] = useState(false)
+  const [showChart, setShowChart] = useState(false)
   const [alertDraft, setAlertDraft] = useState('')
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -239,6 +241,13 @@ function App() {
             >
               📤
             </button>
+            {/* Chart */}
+            <button
+              onClick={() => setShowChart(true)}
+              className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-gray-700 text-gray-400"
+            >
+              📈
+            </button>
           </div>
         </div>
       </header>
@@ -428,6 +437,11 @@ function App() {
           entries={history}
           onClose={() => setShowHistory(false)}
         />
+      )}
+
+      {/* Chart Screen */}
+      {showChart && (
+        <ChartScreen symbol={symbol} onClose={() => setShowChart(false)} />
       )}
     </div>
   )
