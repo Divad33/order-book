@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import type { PriceLevel } from './useOrderBookFetch'
 
 export interface OrderBookState {
-  shortPrices: number[]
-  longPrices: number[]
+  shortPrices: PriceLevel[]
+  longPrices: PriceLevel[]
 }
 
 export interface ComputedBlocks {
@@ -16,17 +17,27 @@ export interface ComputedBlocks {
   entryPoint2: number
 }
 
-const STORAGE_KEY = 'order-book-state'
+export interface HistoryEntry {
+  timestamp: number
+  symbol: string
+  entryPoint: number
+  avgShort: number
+  avgLong: number
+  currentPrice: number
+}
 
-const DEFAULT_SHORT = [
+const STORAGE_KEY = 'order-book-state'
+const HISTORY_KEY = 'order-book-history'
+
+const DEFAULT_SHORT: PriceLevel[] = [
   79600, 79500, 79400, 79300, 79200, 79100, 79000, 78900, 78800, 78700, 78600,
   78500, 78400, 78300, 78200, 78100,
-]
+].map((p) => ({ price: p, volume: 0 }))
 
-const DEFAULT_LONG = [
+const DEFAULT_LONG: PriceLevel[] = [
   78000, 77900, 77800, 77700, 77600, 77500, 77400, 77300, 77200, 77100, 77000,
   76900, 76800, 76700, 76600, 76500,
-]
+].map((p) => ({ price: p, volume: 0 }))
 
 function loadSaved(): OrderBookState | null {
   try {
@@ -39,7 +50,14 @@ function loadSaved(): OrderBookState | null {
       parsed.shortPrices.length > 0 &&
       parsed.longPrices.length > 0
     ) {
-      return parsed as OrderBookState
+      // migrate from old format (number[]) to PriceLevel[]
+      const short = parsed.shortPrices.map((p: number | PriceLevel) =>
+        typeof p === 'number' ? { price: p, volume: 0 } : p,
+      )
+      const long = parsed.longPrices.map((p: number | PriceLevel) =>
+        typeof p === 'number' ? { price: p, volume: 0 } : p,
+      )
+      return { shortPrices: short, longPrices: long }
     }
   } catch {
     // ignore
@@ -53,10 +71,31 @@ function average(nums: number[]): number {
   return valid.reduce((a, b) => a + b, 0) / valid.length
 }
 
+export function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (!raw) return []
+    return JSON.parse(raw) as HistoryEntry[]
+  } catch {
+    return []
+  }
+}
+
+export function saveHistory(entries: HistoryEntry[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(-50)))
+}
+
 export function useOrderBook() {
   const [state, setState] = useState<OrderBookState>(() => {
-    return loadSaved() ?? { shortPrices: DEFAULT_SHORT, longPrices: DEFAULT_LONG }
+    return (
+      loadSaved() ?? { shortPrices: DEFAULT_SHORT, longPrices: DEFAULT_LONG }
+    )
   })
+
+  const [prevPrices, setPrevPrices] = useState<{
+    short: number[]
+    long: number[]
+  }>({ short: [], long: [] })
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -65,7 +104,7 @@ export function useOrderBook() {
   const updateShortPrice = useCallback((index: number, value: number) => {
     setState((prev) => {
       const next = [...prev.shortPrices]
-      next[index] = value
+      next[index] = { ...next[index], price: value }
       return { ...prev, shortPrices: next }
     })
   }, [])
@@ -73,22 +112,28 @@ export function useOrderBook() {
   const updateLongPrice = useCallback((index: number, value: number) => {
     setState((prev) => {
       const next = [...prev.longPrices]
-      next[index] = value
+      next[index] = { ...next[index], price: value }
       return { ...prev, longPrices: next }
     })
   }, [])
 
   const addShortPrice = useCallback(() => {
     setState((prev) => {
-      const last = prev.shortPrices[prev.shortPrices.length - 1] ?? 0
-      return { ...prev, shortPrices: [...prev.shortPrices, last - 100] }
+      const last = prev.shortPrices[prev.shortPrices.length - 1]?.price ?? 0
+      return {
+        ...prev,
+        shortPrices: [...prev.shortPrices, { price: last - 100, volume: 0 }],
+      }
     })
   }, [])
 
   const addLongPrice = useCallback(() => {
     setState((prev) => {
-      const last = prev.longPrices[prev.longPrices.length - 1] ?? 0
-      return { ...prev, longPrices: [...prev.longPrices, last - 100] }
+      const last = prev.longPrices[prev.longPrices.length - 1]?.price ?? 0
+      return {
+        ...prev,
+        longPrices: [...prev.longPrices, { price: last - 100, volume: 0 }],
+      }
     })
   }, [])
 
@@ -107,44 +152,23 @@ export function useOrderBook() {
   }, [])
 
   const computed = useMemo<ComputedBlocks>(() => {
-    const shortList = state.shortPrices
-    const longList = state.longPrices
+    const shortList = state.shortPrices.map((p) => p.price)
+    const longList = state.longPrices.map((p) => p.price)
 
-    // F6 = AVERAGE(B4:B35) = average of all SHORT prices
     const avgShort = average(shortList)
-
-    // F15 = AVERAGE(D4:D35) = average of all LONG prices
     const avgLong = average(longList)
-
-    // F3 = AVERAGE(F6, F15) = average of avgShort and avgLong
     const f3 = average([avgShort, avgLong])
 
-    // G2 (PUNTO DE ENTRADA) = AVERAGE(F3, G3, F15, F6)
-    //   where G3 = F15 = avgLong
-    // = AVERAGE(f3, avgLong, avgLong, avgShort)
     const entryPoint = (f3 + avgLong + avgLong + avgShort) / 4
-
-    // BLOQUE TOPE SHORT = F6 = avgShort
     const bloqueTopeShort = avgShort
-
-    // BLOQUE DE SHORT = F9 = AVERAGE(F3, F15, F6, F6)
     const bloqueDeShort = (f3 + avgLong + avgShort + avgShort) / 4
-
-    // BLOQUE DE LONG = F12 = AVERAGE(F3, F15, F15, F6)
     const bloqueDeLong = (f3 + avgLong + avgLong + avgShort) / 4
-
-    // BLOQUE TOPE LONG = F15 = avgLong
     const bloqueTopeLong = avgLong
 
-    // F30 = B11 (8th SHORT value, index 7)
-    // F31 = D11 (8th LONG value, index 7)
-    // Use middle element as fallback when list has fewer than 8 items
     const shortIdx = Math.min(7, shortList.length - 1)
     const longIdx = Math.min(7, longList.length - 1)
     const f30 = shortList[shortIdx] ?? avgShort
     const f31 = longList[longIdx] ?? avgLong
-
-    // F28 = AVERAGE(F3, F30, F31)
     const entryPoint2 = (f3 + f30 + f31) / 3
 
     return {
@@ -160,15 +184,20 @@ export function useOrderBook() {
   }, [state.shortPrices, state.longPrices])
 
   const loadPrices = useCallback(
-    (shortPrices: number[], longPrices: number[]) => {
+    (shortPrices: PriceLevel[], longPrices: PriceLevel[]) => {
+      setPrevPrices({
+        short: state.shortPrices.map((p) => p.price),
+        long: state.longPrices.map((p) => p.price),
+      })
       setState({ shortPrices, longPrices })
     },
-    [],
+    [state.shortPrices, state.longPrices],
   )
 
   return {
     ...state,
     computed,
+    prevPrices,
     updateShortPrice,
     updateLongPrice,
     addShortPrice,

@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+/* Landscape optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  .grid-cols-2 {
+    gap: 0.25rem;
+  }
+}

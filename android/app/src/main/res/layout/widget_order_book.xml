@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF1F2937"
+    android:padding="12dp"
+    android:id="@+id/widget_root">
+
+    <TextView
+        android:id="@+id/widget_symbol"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="BTC/USDT"
+        android:textColor="#FFFBBF24"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_price"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="$0.00"
+        android:textColor="#FFFFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginTop="2dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <TextView
+            android:id="@+id/widget_short"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="S: $0"
+            android:textColor="#FFEF4444"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/widget_long"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="L: $0"
+            android:textColor="#FF22C55E"
+            android:textSize="10sp"
+            android:gravity="end" />
+    </LinearLayout>
+</LinearLayout>
