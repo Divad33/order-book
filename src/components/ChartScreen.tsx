@@ -20,9 +20,10 @@ interface ChartScreenProps {
   onClose: () => void
   embedded?: boolean
   overlayLines?: OverlayLine[]
+  dataSourceLabel?: string
 }
 
-export function ChartScreen({ symbol, onClose, embedded, overlayLines }: ChartScreenProps) {
+export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourceLabel }: ChartScreenProps) {
   const [interval, setInterval_] = useState<Interval>('1h')
   const [klines, setKlines] = useState<Kline[]>([])
   const [loading, setLoading] = useState(false)
@@ -160,9 +161,8 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines }: ChartSc
       )}
 
       {/* Bottom info */}
-      <div className="bg-[#1a1f2e] px-3 py-1.5 flex items-center justify-between text-[10px] text-gray-600">
-        <span>{klines.length} velas</span>
-        <span>Binance Spot</span>
+      <div className="bg-[#1a1f2e] px-3 py-1.5 flex items-center justify-end text-[10px] text-gray-600">
+        <span>Binance {dataSourceLabel || 'Spot'}</span>
       </div>
     </div>
   )

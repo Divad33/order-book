@@ -97,7 +97,7 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
     const h = dims.h
     const gap = 2
     const totalCandleW = candleWidth + gap
-    const rightPad = 65
+    const rightPad = 85
     const topPad = 10
     const bottomPad = 28
     const chartW = w - rightPad
@@ -218,11 +218,11 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
       ctx.fillText(label, x, h - 4)
     }
 
-    // Current price line
-    if (visible.length > 0) {
+    // Current price line (from last candle, shown when no overlay PRECIO line)
+    if (visible.length > 0 && (!overlayLines || !overlayLines.some(l => l.label === 'PRECIO'))) {
       const lastK = visible[visible.length - 1]
       const y = priceToY(lastK.close)
-      ctx.strokeStyle = '#fbbf24'
+      ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = 1
       ctx.setLineDash([4, 3])
       ctx.beginPath()
@@ -231,8 +231,7 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
       ctx.stroke()
       ctx.setLineDash([])
 
-      // Price tag
-      ctx.fillStyle = '#fbbf24'
+      ctx.fillStyle = '#ffffff'
       ctx.fillRect(chartW, y - 8, rightPad, 16)
       ctx.fillStyle = '#000'
       ctx.font = 'bold 9px monospace'
@@ -243,13 +242,13 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
       ctx.fillText(pStr, w - 4, y + 3)
     }
 
-    // Overlay lines (Short, Long, Entry Point)
+    // Overlay lines (5 points + current price)
     if (overlayLines && overlayLines.length > 0) {
       for (const line of overlayLines) {
         if (line.price < minP || line.price > maxP) continue
         const y = priceToY(line.price)
 
-        // Dashed line
+        // Dashed line across chart
         ctx.strokeStyle = line.color
         ctx.lineWidth = 1
         ctx.setLineDash([6, 4])
@@ -259,28 +258,20 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
         ctx.stroke()
         ctx.setLineDash([])
 
-        // Label on right side
-        const labelText = line.label
-        ctx.font = 'bold 8px monospace'
-        const tw = ctx.measureText(labelText).width
-        const tagW = tw + 8
-        const tagH = 14
-        ctx.fillStyle = line.color
-        ctx.globalAlpha = 0.85
-        ctx.fillRect(chartW, y - tagH / 2, tagW, tagH)
-        ctx.globalAlpha = 1
-        ctx.fillStyle = '#000'
-        ctx.textAlign = 'left'
-        ctx.fillText(labelText, chartW + 4, y + 3)
-        ctx.textAlign = 'right'
-
-        // Price value below the label
+        // Price tag on right axis
         const priceStr = line.price >= 1
           ? line.price.toLocaleString(undefined, { maximumFractionDigits: 0 })
           : line.price.toPrecision(5)
+        const tagText = `${line.label} ${priceStr}`
+        ctx.font = 'bold 8px monospace'
+        const tagH = 14
         ctx.fillStyle = line.color
-        ctx.font = '8px monospace'
-        ctx.fillText(priceStr, w - 4, y + 14)
+        ctx.globalAlpha = 0.9
+        ctx.fillRect(chartW, y - tagH / 2, rightPad, tagH)
+        ctx.globalAlpha = 1
+        ctx.fillStyle = line.color === '#ffffff' ? '#000' : '#000'
+        ctx.textAlign = 'right'
+        ctx.fillText(tagText, w - 3, y + 3)
       }
     }
 
@@ -317,7 +308,7 @@ export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps
     const x = e.touches[0].clientX - rect.left
     const gap = 2
     const totalCandleW = candleWidth + gap
-    const rightPad = 65
+    const rightPad = 85
     const chartW = dims.w - rightPad
     const visibleCount = Math.floor(chartW / totalCandleW)
     const startIdx = Math.max(0, klines.length - visibleCount - offset)

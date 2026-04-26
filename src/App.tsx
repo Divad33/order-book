@@ -165,20 +165,29 @@ function App() {
 
   const sourceLabel = dataSource === 'futures' ? 'Futures' : 'Spot'
 
-  // Build overlay lines for the chart
+  // Build overlay lines for the chart (5 points + current price)
   const chartOverlayLines = useMemo<OverlayLine[]>(() => {
     const lines: OverlayLine[] = []
-    if (computed.avgShort > 0) {
-      lines.push({ price: computed.avgShort, color: '#ef4444', label: 'SHORT' })
+    if (computed.bloqueTopeShort > 0) {
+      lines.push({ price: computed.bloqueTopeShort, color: '#ef4444', label: 'T.SHORT' })
     }
-    if (computed.avgLong > 0) {
-      lines.push({ price: computed.avgLong, color: '#22c55e', label: 'LONG' })
+    if (computed.bloqueDeShort > 0) {
+      lines.push({ price: computed.bloqueDeShort, color: '#f87171', label: 'B.SHORT' })
     }
     if (computed.entryPoint2 > 0) {
       lines.push({ price: computed.entryPoint2, color: '#fbbf24', label: 'ENTRADA' })
     }
+    if (computed.bloqueDeLong > 0) {
+      lines.push({ price: computed.bloqueDeLong, color: '#4ade80', label: 'B.LONG' })
+    }
+    if (computed.bloqueTopeLong > 0) {
+      lines.push({ price: computed.bloqueTopeLong, color: '#22c55e', label: 'T.LONG' })
+    }
+    if (currentPrice !== null && currentPrice > 0) {
+      lines.push({ price: currentPrice, color: '#ffffff', label: 'PRECIO' })
+    }
     return lines
-  }, [computed.avgShort, computed.avgLong, computed.entryPoint2])
+  }, [computed.bloqueTopeShort, computed.bloqueDeShort, computed.entryPoint2, computed.bloqueDeLong, computed.bloqueTopeLong, currentPrice])
 
   // ─── Tab: Order Book ─────────────────────────────
   const renderOrderBook = () => (
@@ -347,7 +356,7 @@ function App() {
   // ─── Tab: Chart ──────────────────────────────────
   const renderChart = () => (
     <div className="flex-1 flex flex-col">
-      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} />
+      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} />
     </div>
   )
 
