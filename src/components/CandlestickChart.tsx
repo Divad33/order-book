@@ -9,12 +9,19 @@ export interface Kline {
   volume: number
 }
 
+export interface OverlayLine {
+  price: number
+  color: string
+  label: string
+}
+
 interface CandlestickChartProps {
   klines: Kline[]
   symbol: string
+  overlayLines?: OverlayLine[]
 }
 
-export function CandlestickChart({ klines }: CandlestickChartProps) {
+export function CandlestickChart({ klines, overlayLines }: CandlestickChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [dims, setDims] = useState({ w: 0, h: 0 })
@@ -107,7 +114,7 @@ export function CandlestickChart({ klines }: CandlestickChartProps) {
     ctx.fillStyle = '#0f1729'
     ctx.fillRect(0, 0, w, h)
 
-    // Find price range
+    // Find price range (include overlay lines)
     let minP = Infinity
     let maxP = -Infinity
     let maxVol = 0
@@ -115,6 +122,14 @@ export function CandlestickChart({ klines }: CandlestickChartProps) {
       if (k.low < minP) minP = k.low
       if (k.high > maxP) maxP = k.high
       if (k.volume > maxVol) maxVol = k.volume
+    }
+    if (overlayLines) {
+      for (const line of overlayLines) {
+        if (line.price > 0) {
+          if (line.price < minP) minP = line.price
+          if (line.price > maxP) maxP = line.price
+        }
+      }
     }
     const pRange = maxP - minP || 1
     const padding = pRange * 0.05
@@ -228,6 +243,47 @@ export function CandlestickChart({ klines }: CandlestickChartProps) {
       ctx.fillText(pStr, w - 4, y + 3)
     }
 
+    // Overlay lines (Short, Long, Entry Point)
+    if (overlayLines && overlayLines.length > 0) {
+      for (const line of overlayLines) {
+        if (line.price < minP || line.price > maxP) continue
+        const y = priceToY(line.price)
+
+        // Dashed line
+        ctx.strokeStyle = line.color
+        ctx.lineWidth = 1
+        ctx.setLineDash([6, 4])
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(chartW, y)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // Label on right side
+        const labelText = line.label
+        ctx.font = 'bold 8px monospace'
+        const tw = ctx.measureText(labelText).width
+        const tagW = tw + 8
+        const tagH = 14
+        ctx.fillStyle = line.color
+        ctx.globalAlpha = 0.85
+        ctx.fillRect(chartW, y - tagH / 2, tagW, tagH)
+        ctx.globalAlpha = 1
+        ctx.fillStyle = '#000'
+        ctx.textAlign = 'left'
+        ctx.fillText(labelText, chartW + 4, y + 3)
+        ctx.textAlign = 'right'
+
+        // Price value below the label
+        const priceStr = line.price >= 1
+          ? line.price.toLocaleString(undefined, { maximumFractionDigits: 0 })
+          : line.price.toPrecision(5)
+        ctx.fillStyle = line.color
+        ctx.font = '8px monospace'
+        ctx.fillText(priceStr, w - 4, y + 14)
+      }
+    }
+
     // Crosshair
     if (crosshair) {
       ctx.strokeStyle = 'rgba(255,255,255,0.3)'
@@ -253,7 +309,7 @@ export function CandlestickChart({ klines }: CandlestickChartProps) {
       ctx.textAlign = 'left'
       ctx.fillText(info, 10, 13)
     }
-  }, [klines, dims, offset, candleWidth, crosshair])
+  }, [klines, dims, offset, candleWidth, crosshair, overlayLines])
 
   const handleCanvasTouch = useCallback((e: React.TouchEvent) => {
     if (e.touches.length !== 1 || !canvasRef.current) return

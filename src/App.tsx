@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
@@ -6,6 +6,7 @@ import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
 import { ChartScreen } from './components/ChartScreen'
+import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
 import { IconRefresh, IconShare, IconBell } from './components/Icons'
@@ -163,6 +164,21 @@ function App() {
     v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const sourceLabel = dataSource === 'futures' ? 'Futures' : 'Spot'
+
+  // Build overlay lines for the chart
+  const chartOverlayLines = useMemo<OverlayLine[]>(() => {
+    const lines: OverlayLine[] = []
+    if (computed.avgShort > 0) {
+      lines.push({ price: computed.avgShort, color: '#ef4444', label: 'SHORT' })
+    }
+    if (computed.avgLong > 0) {
+      lines.push({ price: computed.avgLong, color: '#22c55e', label: 'LONG' })
+    }
+    if (computed.entryPoint2 > 0) {
+      lines.push({ price: computed.entryPoint2, color: '#fbbf24', label: 'ENTRADA' })
+    }
+    return lines
+  }, [computed.avgShort, computed.avgLong, computed.entryPoint2])
 
   // ─── Tab: Order Book ─────────────────────────────
   const renderOrderBook = () => (
@@ -331,7 +347,7 @@ function App() {
   // ─── Tab: Chart ──────────────────────────────────
   const renderChart = () => (
     <div className="flex-1 flex flex-col">
-      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded />
+      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} />
     </div>
   )
 

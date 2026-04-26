@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { CandlestickChart } from './CandlestickChart'
-import type { Kline } from './CandlestickChart'
+import type { Kline, OverlayLine } from './CandlestickChart'
 import { IconRefresh } from './Icons'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
@@ -19,9 +19,10 @@ interface ChartScreenProps {
   symbol: string
   onClose: () => void
   embedded?: boolean
+  overlayLines?: OverlayLine[]
 }
 
-export function ChartScreen({ symbol, onClose, embedded }: ChartScreenProps) {
+export function ChartScreen({ symbol, onClose, embedded, overlayLines }: ChartScreenProps) {
   const [interval, setInterval_] = useState<Interval>('1h')
   const [klines, setKlines] = useState<Kline[]>([])
   const [loading, setLoading] = useState(false)
@@ -155,7 +156,7 @@ export function ChartScreen({ symbol, onClose, embedded }: ChartScreenProps) {
           Cargando gráfico...
         </div>
       ) : (
-        <CandlestickChart klines={klines} symbol={symbol} />
+        <CandlestickChart klines={klines} symbol={symbol} overlayLines={overlayLines} />
       )}
 
       {/* Bottom info */}
