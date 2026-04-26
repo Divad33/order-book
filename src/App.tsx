@@ -3,11 +3,11 @@ import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
-import { BlockCard } from './components/BlockCard'
-import { FetchPanel } from './components/FetchPanel'
 import { SymbolSelector } from './components/SymbolSelector'
-import { HistoryPanel } from './components/HistoryPanel'
 import { ChartScreen } from './components/ChartScreen'
+import { BottomNav } from './components/BottomNav'
+import type { TabId } from './components/BottomNav'
+import { IconRefresh, IconShare, IconBell } from './components/Icons'
 
 const AUTO_REFRESH_INTERVAL = 30_000
 
@@ -32,22 +32,17 @@ function App() {
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [countdown, setCountdown] = useState(0)
-  const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<TabId>('orderbook')
 
   // Alert state
   const [alertPrice, setAlertPrice] = useState<number | null>(null)
-  const [alertDirection, setAlertDirection] = useState<'above' | 'below'>(
-    'above',
-  )
-  const [showAlertForm, setShowAlertForm] = useState(false)
-  const [showChart, setShowChart] = useState(false)
+  const [alertDirection, setAlertDirection] = useState<'above' | 'below'>('above')
   const [alertDraft, setAlertDraft] = useState('')
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const appRef = useRef<HTMLDivElement>(null)
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -62,7 +57,6 @@ function App() {
         }),
       )
 
-      // Save to history
       const shortAvg =
         result.shortPrices.reduce((a, b) => a + b.price, 0) /
         result.shortPrices.length
@@ -89,7 +83,6 @@ function App() {
         return next
       })
 
-      // Check alert
       if (alertPrice !== null) {
         const triggered =
           alertDirection === 'above'
@@ -106,31 +99,21 @@ function App() {
     }
   }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection])
 
-  // Keep ref to latest handleFetch for auto-refresh
   const fetchRef = useRef(handleFetch)
   useEffect(() => {
     fetchRef.current = handleFetch
   }, [handleFetch])
 
-  // Auto-refresh
   useEffect(() => {
     if (!autoRefresh) return
-
-    // Initial fetch via setTimeout to avoid sync setState in effect
     const initTimer = setTimeout(() => fetchRef.current(), 0)
-
     const secs = AUTO_REFRESH_INTERVAL / 1000
     const startTime = Date.now()
-
-    intervalRef.current = setInterval(() => {
-      fetchRef.current()
-    }, AUTO_REFRESH_INTERVAL)
-
+    intervalRef.current = setInterval(() => fetchRef.current(), AUTO_REFRESH_INTERVAL)
     countdownRef.current = setInterval(() => {
       const elapsed = ((Date.now() - startTime) / 1000) % secs
       setCountdown(Math.max(0, Math.round(secs - elapsed)))
     }, 1000)
-
     return () => {
       clearTimeout(initTimer)
       if (intervalRef.current) clearInterval(intervalRef.current)
@@ -152,211 +135,132 @@ function App() {
       `Bloque Tope Long: ${computed.bloqueTopeLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       '',
       'SHORT:',
-      ...shortPrices.map(
-        (p, i) => `  ${i + 1}. ${p.price.toLocaleString()}`,
-      ),
+      ...shortPrices.map((p, i) => `  ${i + 1}. ${p.price.toLocaleString()}`),
       '',
       'LONG:',
-      ...longPrices.map(
-        (p, i) => `  ${i + 1}. ${p.price.toLocaleString()}`,
-      ),
+      ...longPrices.map((p, i) => `  ${i + 1}. ${p.price.toLocaleString()}`),
     ]
     const text = lines.filter((l) => l !== undefined).join('\n')
-
     if (navigator.share) {
-      navigator
-        .share({ title: `Order Book ${base}/USDT`, text })
-        .catch(() => {})
+      navigator.share({ title: `Order Book ${base}/USDT`, text }).catch(() => {})
     } else {
-      navigator.clipboard.writeText(text).then(() => {
-        alert('Datos copiados al portapapeles')
-      })
+      navigator.clipboard.writeText(text).then(() => alert('Datos copiados al portapapeles'))
     }
   }, [symbol, currentPrice, computed, shortPrices, longPrices])
 
   const base = symbol.replace('USDT', '')
 
-  return (
-    <div ref={appRef} className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-bold tracking-tight">LIBRO DE ORDENES</h1>
-          <div className="flex items-center gap-2">
-            <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
-          </div>
-        </div>
+  const fmt = (v: number) =>
+    v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-        {/* Live price + toolbar */}
-        <div className="flex items-center justify-between mt-1.5">
-          <div className="flex items-center gap-2">
-            {currentPrice !== null && (
-              <span className="text-sm font-bold text-yellow-400 tabular-nums">
+  // ─── Tab: Order Book ─────────────────────────────
+  const renderOrderBook = () => (
+    <div className="flex-1 overflow-y-auto">
+      {/* Symbol + Price Card */}
+      <div className="px-4 pt-4 pb-2">
+        <div className="bg-[#1e2536] rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  autoRefresh
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+                }`}
+              >
+                <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
+                {autoRefresh ? `${countdown}s` : 'Auto'}
+              </button>
+              <button
+                onClick={handleExport}
+                className="p-2 rounded-full bg-gray-700/50 text-gray-400 active:bg-gray-600/50"
+              >
+                <IconShare size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Current Price */}
+          {currentPrice !== null ? (
+            <div className="mb-1">
+              <span className="text-3xl font-bold text-white tabular-nums tracking-tight">
                 ${currentPrice.toLocaleString()}
               </span>
-            )}
-            {lastUpdate && (
-              <span className="text-[10px] text-gray-500">{lastUpdate}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {/* Auto-refresh toggle */}
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                autoRefresh
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-700 text-gray-400'
-              }`}
-            >
-              {autoRefresh ? `⟳ ${countdown}s` : '⟳ Auto'}
-            </button>
-            {/* Alert */}
-            <button
-              onClick={() => {
-                setShowAlertForm(!showAlertForm)
-                setAlertDraft(currentPrice?.toString() ?? '')
-              }}
-              className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                alertPrice !== null
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-700 text-gray-400'
-              }`}
-            >
-              {alertPrice !== null
-                ? `🔔 $${alertPrice.toLocaleString()}`
-                : '🔔'}
-            </button>
-            {/* History */}
-            <button
-              onClick={() => setShowHistory(true)}
-              className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-gray-700 text-gray-400"
-            >
-              📊
-            </button>
-            {/* Export */}
-            <button
-              onClick={handleExport}
-              className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-gray-700 text-gray-400"
-            >
-              📤
-            </button>
-            {/* Chart */}
-            <button
-              onClick={() => setShowChart(true)}
-              className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-gray-700 text-gray-400"
-            >
-              📈
-            </button>
-          </div>
-        </div>
-      </header>
+              {lastUpdate && (
+                <span className="text-xs text-gray-500 ml-2">{lastUpdate}</span>
+              )}
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm mb-1">Toca para obtener datos</div>
+          )}
 
-      {/* Alert form */}
-      {showAlertForm && (
-        <div className="bg-gray-800/95 px-3 py-2 border-b border-gray-700 space-y-1.5">
-          <div className="text-xs text-gray-300 font-semibold">
-            Alerta de Precio ({base})
-          </div>
-          <div className="flex gap-1.5 items-center">
-            <select
-              value={alertDirection}
-              onChange={(e) =>
-                setAlertDirection(e.target.value as 'above' | 'below')
-              }
-              className="bg-gray-700 text-white text-xs rounded px-1.5 py-1 border border-gray-600"
-            >
-              <option value="above">≥ Sube a</option>
-              <option value="below">≤ Baja a</option>
-            </select>
-            <input
-              type="number"
-              value={alertDraft}
-              onChange={(e) => setAlertDraft(e.target.value)}
-              placeholder="Precio"
-              className="flex-1 bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600 outline-none"
-            />
-            <button
-              onClick={() => {
-                const p = parseFloat(alertDraft)
-                if (!isNaN(p)) {
-                  setAlertPrice(p)
-                  setShowAlertForm(false)
-                }
-              }}
-              className="bg-orange-600 text-white text-xs font-bold px-2 py-1 rounded"
-            >
-              Activar
-            </button>
-            {alertPrice !== null && (
-              <button
-                onClick={() => {
-                  setAlertPrice(null)
-                  setShowAlertForm(false)
-                }}
-                className="bg-gray-600 text-white text-xs px-2 py-1 rounded"
-              >
-                Borrar
-              </button>
-            )}
-          </div>
+          {/* Fetch button */}
+          <button
+            onClick={handleFetch}
+            disabled={loading}
+            className="w-full mt-3 bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-500/50 text-black font-bold text-sm py-2.5 rounded-xl transition-colors active:scale-[0.98]"
+          >
+            {loading ? 'Cargando...' : `Obtener Datos (${base})`}
+          </button>
+          {error && (
+            <div className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-1.5 mt-2">
+              {error}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Fetch Panel */}
-      <FetchPanel
-        onFetch={handleFetch}
-        loading={loading}
-        error={error}
-        label={`Obtener Datos (${base})`}
-      />
-
-      {/* Punto de Entrada */}
-      <div className="bg-yellow-500 px-4 py-3 border-b border-yellow-600">
-        <div className="text-xs font-semibold uppercase tracking-wider text-black/70 mb-0.5">
-          Punto de Entrada
-        </div>
-        <div className="text-2xl font-bold tabular-nums text-black">
-          {computed.entryPoint2.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+      {/* Entry Point Card */}
+      <div className="px-4 pb-2">
+        <div className="bg-gradient-to-r from-yellow-500/20 to-amber-500/10 border border-yellow-500/20 rounded-2xl p-4">
+          <div className="text-xs font-medium text-yellow-400/70 uppercase tracking-wider mb-1">
+            Punto de Entrada
+          </div>
+          <div className="text-2xl font-bold tabular-nums text-yellow-400">
+            {fmt(computed.entryPoint2)}
+          </div>
         </div>
       </div>
 
       {/* Blocks Grid */}
-      <div className="grid grid-cols-2 gap-2 px-3 py-3">
-        <BlockCard
-          label="Bloque Tope Short"
-          value={computed.bloqueTopeShort}
-          variant="short"
-        />
-        <BlockCard
-          label="Bloque de Short"
-          value={computed.bloqueDeShort}
-          variant="short"
-        />
-        <BlockCard
-          label="Bloque de Long"
-          value={computed.bloqueDeLong}
-          variant="long"
-        />
-        <BlockCard
-          label="Bloque Tope Long"
-          value={computed.bloqueTopeLong}
-          variant="long"
-        />
+      <div className="grid grid-cols-2 gap-2 px-4 pb-2">
+        <div className="bg-[#1e2536] rounded-xl p-3">
+          <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
+            Bloque Tope Short
+          </div>
+          <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueTopeShort)}</div>
+        </div>
+        <div className="bg-[#1e2536] rounded-xl p-3">
+          <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
+            Bloque de Short
+          </div>
+          <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueDeShort)}</div>
+        </div>
+        <div className="bg-[#1e2536] rounded-xl p-3">
+          <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
+            Bloque de Long
+          </div>
+          <div className="text-sm font-bold text-green-400 tabular-nums">{fmt(computed.bloqueDeLong)}</div>
+        </div>
+        <div className="bg-[#1e2536] rounded-xl p-3">
+          <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
+            Bloque Tope Long
+          </div>
+          <div className="text-sm font-bold text-green-400 tabular-nums">{fmt(computed.bloqueTopeLong)}</div>
+        </div>
       </div>
 
       {/* Price Columns */}
-      <div className="flex-1 px-3 pb-4">
+      <div className="px-4 pb-4">
         <div className="grid grid-cols-2 gap-3">
           {/* SHORT Column */}
           <div>
-            <div className="bg-red-800 text-center font-bold text-sm py-2 rounded-t-lg uppercase tracking-wider">
+            <div className="bg-red-500/20 border border-red-500/20 text-red-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Short
             </div>
-            <div className="bg-gray-800/50 rounded-b-lg p-2 space-y-1.5">
+            <div className="bg-[#1e2536] rounded-b-xl p-2 space-y-1">
               {shortPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -372,7 +276,7 @@ function App() {
               ))}
               <button
                 onClick={addShortPrice}
-                className="w-full text-center text-xs text-red-400 border border-dashed border-red-700 rounded py-1.5 hover:bg-red-900/30 transition-colors"
+                className="w-full text-center text-xs text-red-400/60 border border-dashed border-red-500/20 rounded-lg py-1.5 hover:bg-red-900/20 transition-colors"
               >
                 + Agregar
               </button>
@@ -381,10 +285,10 @@ function App() {
 
           {/* LONG Column */}
           <div>
-            <div className="bg-green-700 text-center font-bold text-sm py-2 rounded-t-lg uppercase tracking-wider">
+            <div className="bg-green-500/20 border border-green-500/20 text-green-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Long
             </div>
-            <div className="bg-gray-800/50 rounded-b-lg p-2 space-y-1.5">
+            <div className="bg-[#1e2536] rounded-b-xl p-2 space-y-1">
               {longPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -400,7 +304,7 @@ function App() {
               ))}
               <button
                 onClick={addLongPrice}
-                className="w-full text-center text-xs text-green-400 border border-dashed border-green-700 rounded py-1.5 hover:bg-green-900/30 transition-colors"
+                className="w-full text-center text-xs text-green-400/60 border border-dashed border-green-500/20 rounded-lg py-1.5 hover:bg-green-900/20 transition-colors"
               >
                 + Agregar
               </button>
@@ -409,40 +313,202 @@ function App() {
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="bg-gray-800 border-t border-gray-700 px-4 py-3 flex justify-between text-xs">
-        <div>
-          <span className="text-gray-400">Prom. Short: </span>
-          <span className="font-bold text-red-400 tabular-nums">
-            {computed.avgShort.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
+      {/* Averages footer */}
+      <div className="px-4 pb-4">
+        <div className="bg-[#1e2536] rounded-xl px-4 py-2.5 flex justify-between text-xs">
+          <div>
+            <span className="text-gray-500">Prom. Short: </span>
+            <span className="font-bold text-red-400 tabular-nums">{fmt(computed.avgShort)}</span>
+          </div>
+          <div>
+            <span className="text-gray-500">Prom. Long: </span>
+            <span className="font-bold text-green-400 tabular-nums">{fmt(computed.avgLong)}</span>
+          </div>
         </div>
-        <div>
-          <span className="text-gray-400">Prom. Long: </span>
-          <span className="font-bold text-green-400 tabular-nums">
-            {computed.avgLong.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
+      </div>
+    </div>
+  )
+
+  // ─── Tab: Chart ──────────────────────────────────
+  const renderChart = () => (
+    <div className="flex-1 flex flex-col">
+      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded />
+    </div>
+  )
+
+  // ─── Tab: History ────────────────────────────────
+  const renderHistory = () => {
+    const reversed = [...history].reverse()
+    return (
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
+        <h2 className="text-lg font-bold text-white mb-3">Historial</h2>
+        {reversed.length === 0 ? (
+          <div className="text-gray-500 text-center py-12 text-sm">
+            Aún no hay historial. Obtén datos para empezar.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {reversed.map((e, i) => {
+              const d = new Date(e.timestamp)
+              const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+              return (
+                <div key={i} className="bg-[#1e2536] rounded-xl p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-2 py-0.5 rounded-full">
+                      {e.symbol.replace('USDT', '')}
+                    </span>
+                    <span className="text-xs text-gray-500">{date} {time}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-gray-500">Precio: </span>
+                      <span className="text-white font-bold">{e.currentPrice.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Entrada: </span>
+                      <span className="text-yellow-400 font-bold">
+                        {e.entryPoint.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Short: </span>
+                      <span className="text-red-400 font-bold">
+                        {e.avgShort.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Long: </span>
+                      <span className="text-green-400 font-bold">
+                        {e.avgLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
             })}
-          </span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Tab: Settings (Alerts + Config) ─────────────
+  const renderSettings = () => (
+    <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-4">
+      <h2 className="text-lg font-bold text-white">Ajustes</h2>
+
+      {/* Alert section */}
+      <div className="bg-[#1e2536] rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <IconBell size={18} className="text-yellow-400" />
+          <h3 className="text-sm font-bold text-white">Alerta de Precio</h3>
         </div>
-      </footer>
 
-      {/* History Panel */}
-      {showHistory && (
-        <HistoryPanel
-          entries={history}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
+        {alertPrice !== null && (
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2 mb-3 flex items-center justify-between">
+            <span className="text-xs text-orange-400">
+              Activa: {alertDirection === 'above' ? '≥' : '≤'} ${alertPrice.toLocaleString()}
+            </span>
+            <button
+              onClick={() => setAlertPrice(null)}
+              className="text-xs text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded-full"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
 
-      {/* Chart Screen */}
-      {showChart && (
-        <ChartScreen symbol={symbol} onClose={() => setShowChart(false)} />
-      )}
+        <div className="space-y-2">
+          <div className="text-xs text-gray-400">Notificar cuando {base} llegue a:</div>
+          <div className="flex gap-2">
+            <select
+              value={alertDirection}
+              onChange={(e) => setAlertDirection(e.target.value as 'above' | 'below')}
+              className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 border border-gray-700 outline-none"
+            >
+              <option value="above">≥ Sube a</option>
+              <option value="below">≤ Baja a</option>
+            </select>
+            <input
+              type="number"
+              value={alertDraft}
+              onChange={(e) => setAlertDraft(e.target.value)}
+              placeholder="Precio"
+              className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 border border-gray-700 outline-none"
+            />
+          </div>
+          <button
+            onClick={() => {
+              const p = parseFloat(alertDraft)
+              if (!isNaN(p)) setAlertPrice(p)
+            }}
+            className="w-full bg-yellow-500 text-black text-sm font-bold py-2 rounded-xl active:scale-[0.98] transition-transform"
+          >
+            Activar Alerta
+          </button>
+        </div>
+      </div>
+
+      {/* Auto-refresh section */}
+      <div className="bg-[#1e2536] rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <IconRefresh size={18} className="text-yellow-400" />
+          <h3 className="text-sm font-bold text-white">Auto-Refresh</h3>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Actualizar cada 30 segundos</span>
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`relative w-11 h-6 rounded-full transition-colors ${
+              autoRefresh ? 'bg-green-500' : 'bg-gray-600'
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                autoRefresh ? 'translate-x-5.5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+        {autoRefresh && (
+          <div className="text-xs text-green-400 mt-2">
+            Próxima actualización en {countdown}s
+          </div>
+        )}
+      </div>
+
+      {/* Export section */}
+      <div className="bg-[#1e2536] rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <IconShare size={18} className="text-yellow-400" />
+          <h3 className="text-sm font-bold text-white">Exportar Datos</h3>
+        </div>
+        <button
+          onClick={handleExport}
+          className="w-full bg-gray-700/50 text-gray-300 text-sm font-medium py-2.5 rounded-xl border border-gray-600/30 active:bg-gray-600/50 transition-colors"
+        >
+          Compartir Order Book
+        </button>
+      </div>
+
+      {/* Info */}
+      <div className="text-center text-[10px] text-gray-600 py-2">
+        Order Book v2.0 — Datos de Binance Spot
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="h-screen bg-[#141821] text-white flex flex-col overflow-hidden">
+      {/* Content */}
+      {activeTab === 'orderbook' && renderOrderBook()}
+      {activeTab === 'chart' && renderChart()}
+      {activeTab === 'history' && renderHistory()}
+      {activeTab === 'settings' && renderSettings()}
+
+      {/* Bottom Navigation */}
+      <BottomNav active={activeTab} onChange={setActiveTab} />
     </div>
   )
 }

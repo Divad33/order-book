@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { CandlestickChart } from './CandlestickChart'
 import type { Kline } from './CandlestickChart'
+import { IconRefresh } from './Icons'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 type Interval = (typeof INTERVALS)[number]
@@ -17,9 +18,10 @@ const INTERVAL_LABELS: Record<Interval, string> = {
 interface ChartScreenProps {
   symbol: string
   onClose: () => void
+  embedded?: boolean
 }
 
-export function ChartScreen({ symbol, onClose }: ChartScreenProps) {
+export function ChartScreen({ symbol, onClose, embedded }: ChartScreenProps) {
   const [interval, setInterval_] = useState<Interval>('1h')
   const [klines, setKlines] = useState<Kline[]>([])
   const [loading, setLoading] = useState(false)
@@ -79,23 +81,27 @@ export function ChartScreen({ symbol, onClose }: ChartScreenProps) {
 
   const changeUp = priceChange !== null && priceChange >= 0
 
+  const wrapperClass = embedded
+    ? 'flex-1 flex flex-col bg-[#141821]'
+    : 'fixed inset-0 bg-[#141821] z-50 flex flex-col'
+
   return (
-    <div className="fixed inset-0 bg-[#0f1729] z-50 flex flex-col">
+    <div className={wrapperClass}>
       {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-3 py-2 flex items-center gap-2">
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-white text-lg px-1"
-        >
-          ←
-        </button>
+      <div className="bg-[#1a1f2e] px-3 py-2.5 flex items-center gap-2">
+        {!embedded && (
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-lg px-1"
+          >
+            ←
+          </button>
+        )}
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-sm">
-              {base}/USDT
-            </span>
+            <span className="text-white font-bold text-sm">{base}/USDT</span>
             {lastPrice !== null && (
-              <span className="text-white text-sm font-mono">
+              <span className="text-white text-sm font-mono tabular-nums">
                 ${lastPrice >= 1
                   ? lastPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })
                   : lastPrice.toPrecision(5)}
@@ -103,10 +109,10 @@ export function ChartScreen({ symbol, onClose }: ChartScreenProps) {
             )}
             {priceChange !== null && (
               <span
-                className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   changeUp
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-red-500/20 text-red-400'
+                    ? 'bg-green-500/15 text-green-400'
+                    : 'bg-red-500/15 text-red-400'
                 }`}
               >
                 {changeUp ? '+' : ''}
@@ -117,24 +123,22 @@ export function ChartScreen({ symbol, onClose }: ChartScreenProps) {
         </div>
         <button
           onClick={fetchKlines}
-          className={`text-gray-400 hover:text-white text-sm px-2 py-1 rounded ${
-            loading ? 'animate-spin' : ''
-          }`}
+          className="p-1.5 rounded-full bg-gray-700/50 text-gray-400 active:bg-gray-600/50"
         >
-          ⟳
+          <IconRefresh size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
 
       {/* Timeframe selector */}
-      <div className="bg-gray-900/50 px-2 py-1.5 flex gap-1 border-b border-gray-800">
+      <div className="bg-[#1a1f2e]/50 px-3 py-1.5 flex gap-1.5">
         {INTERVALS.map((iv) => (
           <button
             key={iv}
             onClick={() => setInterval_(iv)}
-            className={`flex-1 text-xs font-bold py-1.5 rounded transition-colors ${
+            className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-colors ${
               interval === iv
                 ? 'bg-yellow-500 text-black'
-                : 'bg-gray-800 text-gray-400 hover:text-white'
+                : 'bg-[#1e2536] text-gray-500 active:text-white'
             }`}
           >
             {INTERVAL_LABELS[iv]}
@@ -154,8 +158,8 @@ export function ChartScreen({ symbol, onClose }: ChartScreenProps) {
         <CandlestickChart klines={klines} symbol={symbol} />
       )}
 
-      {/* Bottom info bar */}
-      <div className="bg-gray-900 border-t border-gray-800 px-3 py-1.5 flex items-center justify-between text-xs text-gray-500">
+      {/* Bottom info */}
+      <div className="bg-[#1a1f2e] px-3 py-1.5 flex items-center justify-between text-[10px] text-gray-600">
         <span>{klines.length} velas</span>
         <span>Binance Spot</span>
       </div>

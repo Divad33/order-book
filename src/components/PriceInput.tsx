@@ -17,7 +17,6 @@ export function PriceInput({
   onChange,
   onRemove,
   variant,
-  index,
 }: PriceInputProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -29,7 +28,6 @@ export function PriceInput({
       if (value > prevRef.current) setFlash('up')
       else if (value < prevRef.current) setFlash('down')
       prevRef.current = value
-
       const t = setTimeout(() => setFlash(null), 800)
       return () => clearTimeout(t)
     }
@@ -38,19 +36,19 @@ export function PriceInput({
 
   const bgClass =
     variant === 'short'
-      ? 'bg-red-600 border-red-500'
-      : index === 0
-        ? 'bg-green-600 border-green-500'
-        : 'bg-green-500 border-green-400'
+      ? 'bg-red-500/15 border-red-500/20'
+      : 'bg-green-500/15 border-green-500/20'
+
+  const textClass = variant === 'short' ? 'text-red-400' : 'text-green-400'
 
   const flashClass =
     flash === 'up'
-      ? 'ring-2 ring-green-300 brightness-125'
+      ? 'ring-1 ring-green-400/50 bg-green-500/20'
       : flash === 'down'
-        ? 'ring-2 ring-red-300 brightness-125'
+        ? 'ring-1 ring-red-400/50 bg-red-500/20'
         : ''
 
-  const barColor = variant === 'short' ? 'bg-red-400/30' : 'bg-green-400/30'
+  const barColor = variant === 'short' ? 'bg-red-500/15' : 'bg-green-500/15'
 
   const startEdit = useCallback(() => {
     setDraft(value.toString())
@@ -59,9 +57,7 @@ export function PriceInput({
 
   const commitEdit = useCallback(() => {
     const parsed = parseFloat(draft)
-    if (!isNaN(parsed)) {
-      onChange(parsed)
-    }
+    if (!isNaN(parsed)) onChange(parsed)
     setEditing(false)
   }, [draft, onChange])
 
@@ -75,41 +71,31 @@ export function PriceInput({
           onBlur={commitEdit}
           onKeyDown={(e) => e.key === 'Enter' && commitEdit()}
           autoFocus
-          className={`w-full text-center font-bold text-white rounded px-2 py-1.5 text-sm ${bgClass} border outline-none`}
+          className={`w-full text-center font-bold ${textClass} rounded-lg px-2 py-1.5 text-sm ${bgClass} border outline-none`}
         />
         <button
           onClick={onRemove}
-          className="text-red-300 hover:text-red-100 text-xs px-1"
+          className="text-gray-500 hover:text-red-400 text-xs px-1"
           aria-label="Eliminar"
         >
-          x
+          ✕
         </button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={startEdit}
-        className={`relative w-full text-center font-bold text-white rounded px-2 py-1.5 text-sm ${bgClass} border active:opacity-80 overflow-hidden transition-all duration-300 ${flashClass}`}
-      >
-        {/* Volume bar */}
-        {volume > 0 && (
-          <div
-            className={`absolute inset-y-0 ${variant === 'short' ? 'right-0' : 'left-0'} ${barColor} transition-all duration-500`}
-            style={{ width: `${volume * 100}%` }}
-          />
-        )}
-        <span className="relative z-10">{value.toLocaleString()}</span>
-      </button>
-      <button
-        onClick={onRemove}
-        className="text-gray-500 hover:text-red-400 text-xs px-1 opacity-0 group-hover:opacity-100 transition-opacity"
-        aria-label="Eliminar"
-      >
-        x
-      </button>
-    </div>
+    <button
+      onClick={startEdit}
+      className={`relative w-full text-center font-bold ${textClass} rounded-lg px-2 py-1.5 text-sm ${bgClass} border active:opacity-80 overflow-hidden transition-all duration-300 ${flashClass}`}
+    >
+      {volume > 0 && (
+        <div
+          className={`absolute inset-y-0 ${variant === 'short' ? 'right-0' : 'left-0'} ${barColor} transition-all duration-500`}
+          style={{ width: `${volume * 100}%` }}
+        />
+      )}
+      <span className="relative z-10">{value.toLocaleString()}</span>
+    </button>
   )
 }
