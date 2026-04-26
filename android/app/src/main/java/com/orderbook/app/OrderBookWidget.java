@@ -6,7 +6,13 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.widget.RemoteViews;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -23,10 +29,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import android.os.Handler;
-import android.os.Looper;
-import android.util.Log;
 
 public class OrderBookWidget extends AppWidgetProvider {
 
@@ -56,30 +58,54 @@ public class OrderBookWidget extends AppWidgetProvider {
 
         executor.execute(() -> {
             try {
+                Log.d(TAG, "Starting widget update...");
+
                 // Fetch current price
                 String priceJson = fetchUrl("https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT");
-                double currentPrice = extractPrice(priceJson);
+                JSONObject priceObj = new JSONObject(priceJson);
+                double currentPrice = Double.parseDouble(priceObj.getString("price"));
+                Log.d(TAG, "Current price: " + currentPrice);
 
-                // Fetch depth for order book
+                // Fetch depth
                 String depthJson = fetchUrl("https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5000");
+                JSONObject depthObj = new JSONObject(depthJson);
 
-                // Parse asks (shorts) and bids (longs)
-                List<double[]> asks = parseLevels(depthJson, "asks");
-                List<double[]> bids = parseLevels(depthJson, "bids");
+                // Parse asks and bids using JSONArray
+                JSONArray asksArr = depthObj.getJSONArray("asks");
+                JSONArray bidsArr = depthObj.getJSONArray("bids");
 
-                // Calculate step
-                double askStep = calcStep(asks);
-                double bidStep = calcStep(bids);
+                List<double[]> asks = new ArrayList<>();
+                for (int i = 0; i < asksArr.length(); i++) {
+                    JSONArray level = asksArr.getJSONArray(i);
+                    double price = Double.parseDouble(level.getString(0));
+                    double qty = Double.parseDouble(level.getString(1));
+                    asks.add(new double[]{price, qty});
+                }
+
+                List<double[]> bids = new ArrayList<>();
+                for (int i = 0; i < bidsArr.length(); i++) {
+                    JSONArray level = bidsArr.getJSONArray(i);
+                    double price = Double.parseDouble(level.getString(0));
+                    double qty = Double.parseDouble(level.getString(1));
+                    bids.add(new double[]{price, qty});
+                }
+
+                Log.d(TAG, "Parsed asks: " + asks.size() + ", bids: " + bids.size());
+
+                // Calculate step (0.01% of mid price)
+                double step = currentPrice * 0.0001;
+                double magnitude = Math.pow(10, Math.floor(Math.log10(step)));
+                step = Math.max(magnitude, 1e-15);
 
                 // Aggregate and get top 16
-                List<double[]> shortLevels = aggregate(asks, askStep, 16);
-                List<double[]> longLevels = aggregate(bids, bidStep, 16);
+                List<double[]> shortLevels = aggregate(asks, step, 16);
+                List<double[]> longLevels = aggregate(bids, step, 16);
 
                 // Calculate averages
                 double avgShort = average(shortLevels);
                 double avgLong = average(longLevels);
 
-                // Entry point (same formula as app)
+                // Entry point
                 double f3 = (avgShort + avgLong) / 2.0;
                 int si = Math.min(7, shortLevels.size() - 1);
                 int li = Math.min(7, longLevels.size() - 1);
@@ -87,7 +113,9 @@ public class OrderBookWidget extends AppWidgetProvider {
                 double longMid = li >= 0 ? longLevels.get(li)[0] : avgLong;
                 double entryPoint = (f3 + shortMid + longMid) / 3.0;
 
-                // Format
+                Log.d(TAG, "AvgShort=" + avgShort + " AvgLong=" + avgLong + " Entry=" + entryPoint);
+
+                // Format numbers
                 NumberFormat nf = NumberFormat.getInstance(Locale.US);
                 nf.setMaximumFractionDigits(0);
                 nf.setGroupingUsed(true);
@@ -98,13 +126,18 @@ public class OrderBookWidget extends AppWidgetProvider {
 
                 String timeStr = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date());
 
+                String priceStr = "$" + nf.format(currentPrice);
+                String shortStr = "$" + nf.format(avgShort);
+                String longStr = "$" + nf.format(avgLong);
+                String entryStr = "$" + nf2.format(entryPoint);
+
                 mainHandler.post(() -> {
                     RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_order_book);
                     views.setTextViewText(R.id.widget_symbol, "BTC / USDT");
-                    views.setTextViewText(R.id.widget_price, "$" + nf.format(currentPrice));
-                    views.setTextViewText(R.id.widget_short, "$" + nf.format(avgShort));
-                    views.setTextViewText(R.id.widget_long, "$" + nf.format(avgLong));
-                    views.setTextViewText(R.id.widget_entry, "$" + nf2.format(entryPoint));
+                    views.setTextViewText(R.id.widget_price, priceStr);
+                    views.setTextViewText(R.id.widget_short, shortStr);
+                    views.setTextViewText(R.id.widget_long, longStr);
+                    views.setTextViewText(R.id.widget_entry, entryStr);
                     views.setTextViewText(R.id.widget_time, timeStr);
 
                     // Click to open app
@@ -121,12 +154,13 @@ public class OrderBookWidget extends AppWidgetProvider {
                     views.setOnClickPendingIntent(R.id.widget_price, refreshPi);
 
                     mgr.updateAppWidget(widgetId, views);
+                    Log.d(TAG, "Widget updated successfully");
                 });
             } catch (Exception e) {
-                Log.e(TAG, "Widget update failed", e);
+                Log.e(TAG, "Widget update failed: " + e.getMessage(), e);
                 mainHandler.post(() -> {
                     RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_order_book);
-                    views.setTextViewText(R.id.widget_price, "Error");
+                    views.setTextViewText(R.id.widget_price, "Sin conexión");
                     views.setTextViewText(R.id.widget_time, "Toca para reintentar");
 
                     Intent refresh = new Intent(context, OrderBookWidget.class);
@@ -146,11 +180,13 @@ public class OrderBookWidget extends AppWidgetProvider {
     private String fetchUrl(String urlStr) throws Exception {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(10000);
-        conn.setRequestProperty("User-Agent", "OrderBook-Widget/1.0");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(15000);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+        conn.setRequestProperty("Accept", "application/json");
         try {
             int code = conn.getResponseCode();
+            Log.d(TAG, "HTTP " + code + " for " + urlStr);
             if (code != 200) throw new Exception("HTTP " + code);
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
             StringBuilder sb = new StringBuilder();
@@ -161,57 +197,6 @@ public class OrderBookWidget extends AppWidgetProvider {
         } finally {
             conn.disconnect();
         }
-    }
-
-    private double extractPrice(String json) {
-        int idx = json.indexOf("\"price\"");
-        if (idx < 0) return 0;
-        int start = json.indexOf("\"", idx + 7) + 1;
-        int end = json.indexOf("\"", start);
-        return Double.parseDouble(json.substring(start, end));
-    }
-
-    private List<double[]> parseLevels(String json, String key) {
-        List<double[]> levels = new ArrayList<>();
-        int idx = json.indexOf("\"" + key + "\"");
-        if (idx < 0) return levels;
-
-        int arrStart = json.indexOf("[[", idx);
-        if (arrStart < 0) return levels;
-
-        int pos = arrStart;
-        while (true) {
-            int open = json.indexOf("[\"", pos);
-            if (open < 0) break;
-            int priceStart = open + 2;
-            int priceEnd = json.indexOf("\"", priceStart);
-            if (priceEnd < 0) break;
-
-            int qtyStart = json.indexOf("\"", priceEnd + 1) + 1;
-            int qtyEnd = json.indexOf("\"", qtyStart);
-            if (qtyEnd < 0) break;
-
-            double price = Double.parseDouble(json.substring(priceStart, priceEnd));
-            double qty = Double.parseDouble(json.substring(qtyStart, qtyEnd));
-            levels.add(new double[]{price, qty});
-
-            pos = qtyEnd + 1;
-            // Stop if we hit the end of this array (next key or end)
-            int nextBracket = json.indexOf("]]", pos);
-            if (nextBracket >= 0 && nextBracket < pos + 5) break;
-        }
-        return levels;
-    }
-
-    private double calcStep(List<double[]> levels) {
-        if (levels.size() < 2) return 1;
-        double first = levels.get(0)[0];
-        double last = levels.get(levels.size() - 1)[0];
-        double mid = (first + last) / 2.0;
-        if (mid <= 0) return 1;
-        double raw = mid * 0.0001;
-        double mag = Math.pow(10, Math.floor(Math.log10(raw)));
-        return Math.max(mag, 1e-15);
     }
 
     private List<double[]> aggregate(List<double[]> levels, double step, int count) {
