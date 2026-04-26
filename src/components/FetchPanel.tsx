@@ -2,9 +2,10 @@ interface FetchPanelProps {
   onFetch: () => void
   loading: boolean
   error: string | null
+  label: string
 }
 
-export function FetchPanel({ onFetch, loading, error }: FetchPanelProps) {
+export function FetchPanel({ onFetch, loading, error, label }: FetchPanelProps) {
   return (
     <div className="px-3 py-2 bg-gray-800/80 border-b border-gray-700 space-y-2">
       <button
@@ -12,7 +13,7 @@ export function FetchPanel({ onFetch, loading, error }: FetchPanelProps) {
         disabled={loading}
         className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:text-blue-400 text-white font-bold text-sm py-2 px-4 rounded transition-colors"
       >
-        {loading ? 'Cargando...' : 'Obtener Datos (Binance)'}
+        {loading ? 'Cargando...' : label}
       </button>
 
       {error && (

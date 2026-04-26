@@ -35,7 +35,7 @@ function aggregateByStep(levels: [string, string][]): number[] {
     .sort((a, b) => b - a)
 }
 
-export function useOrderBookFetch() {
+export function useOrderBookFetch(symbol: string) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,7 +45,7 @@ export function useOrderBookFetch() {
 
     try {
       const res = await fetch(
-        'https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5000',
+        `https://data-api.binance.vision/api/v3/depth?symbol=${symbol}&limit=5000`,
       )
       if (!res.ok) throw new Error(`Binance error: ${res.status}`)
 
@@ -61,7 +61,7 @@ export function useOrderBookFetch() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [symbol])
 
   return { fetchOrderBook, loading, error }
 }

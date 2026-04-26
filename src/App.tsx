@@ -1,9 +1,10 @@
-import { useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useOrderBook } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { BlockCard } from './components/BlockCard'
 import { FetchPanel } from './components/FetchPanel'
+import { SymbolSelector } from './components/SymbolSelector'
 
 function App() {
   const {
@@ -19,7 +20,8 @@ function App() {
     loadPrices,
   } = useOrderBook()
 
-  const { fetchOrderBook, loading, error } = useOrderBookFetch()
+  const [symbol, setSymbol] = useState('BTCUSDT')
+  const { fetchOrderBook, loading, error } = useOrderBookFetch(symbol)
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -28,6 +30,8 @@ function App() {
     }
   }, [fetchOrderBook, loadPrices])
 
+  const base = symbol.replace('USDT', '')
+
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       {/* Header */}
@@ -35,9 +39,7 @@ function App() {
         <h1 className="text-lg font-bold tracking-tight">
           LIBRO DE ORDENES
         </h1>
-        <span className="text-xs bg-yellow-600 text-white font-bold px-2 py-0.5 rounded">
-          BTC / USDT
-        </span>
+        <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
       </header>
 
       {/* Fetch Panel */}
@@ -45,6 +47,7 @@ function App() {
         onFetch={handleFetch}
         loading={loading}
         error={error}
+        label={`Obtener Datos (${base})`}
       />
 
       {/* Punto de Entrada - yellow banner with black text */}
