@@ -10,6 +10,21 @@ interface SymbolInfo {
   base: string
 }
 
+const STABLECOINS = new Set([
+  'USDC', 'BUSD', 'FDUSD', 'TUSD', 'DAI', 'USDP', 'FRAX', 'SUSD',
+  'USDE', 'RLUSD', 'USD1', 'USDS', 'EURI', 'AEUR', 'BFUSD', 'XUSD',
+  'BKRW', 'EUR', 'GBP', 'AUD', 'PAX', 'USDSOLD', 'USDSB', 'WBTC',
+  'BETH', 'WBETH', 'BNSOL', 'PAXG', 'XAUT',
+])
+
+const DELISTED = new Set([
+  'BCC', 'VEN', 'BCHABC', 'BCHSV', 'BTT', 'NANO', 'ERD', 'NPXS',
+  'STORM', 'HC', 'MCO', 'BULL', 'BEAR', 'ETHBULL', 'ETHBEAR',
+  'EOSBULL', 'EOSBEAR', 'XRPBULL', 'XRPBEAR', 'STRAT', 'BNBBULL',
+  'BNBBEAR', 'XZC', 'GXS', 'LEND', 'BZRX', 'RAMP', 'EPS', 'NU',
+  'KEEP', 'RGT', 'ANY', 'UST',
+])
+
 export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -27,12 +42,14 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
       .then((r) => r.json())
       .then((data: { symbol: string; quoteVolume: string }[]) => {
         const usdt = data
-          .filter(
-            (d) =>
-              d.symbol.endsWith('USDT') &&
-              !d.symbol.includes('DOWN') &&
-              !d.symbol.includes('UP'),
-          )
+          .filter((d) => {
+            if (!d.symbol.endsWith('USDT')) return false
+            const base = d.symbol.replace('USDT', '')
+            if (STABLECOINS.has(base)) return false
+            if (DELISTED.has(base)) return false
+            if (base.includes('DOWN') || base.includes('UP')) return false
+            return true
+          })
           .sort(
             (a, b) =>
               parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume),
@@ -72,7 +89,7 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-h-72 flex flex-col">
+        <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-h-80 flex flex-col">
           <div className="p-2 border-b border-gray-700">
             <input
               ref={inputRef}
@@ -94,20 +111,24 @@ export function SymbolSelector({ symbol, onSymbolChange }: SymbolSelectorProps) 
                 Cargando monedas...
               </div>
             )}
-            {filtered.map((s) => (
+            {filtered.map((s, i) => (
               <button
                 key={s.symbol}
                 onClick={() => {
                   onSymbolChange(s.symbol)
                   setOpen(false)
                 }}
-                className={`w-full text-left text-xs px-3 py-2 transition-colors ${
+                className={`w-full text-left text-xs px-3 py-2 flex items-center gap-2 transition-colors ${
                   s.symbol === symbol
                     ? 'bg-yellow-600 text-white font-bold'
                     : 'text-gray-300 active:bg-gray-700'
                 }`}
               >
-                {s.base} / USDT
+                <span className="text-gray-500 w-5 text-right font-mono">
+                  {i + 1}
+                </span>
+                <span className="font-semibold">{s.base}</span>
+                <span className="text-gray-500">/ USDT</span>
               </button>
             ))}
             {symbols.length > 0 && filtered.length === 0 && (
