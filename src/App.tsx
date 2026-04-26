@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
+import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
 import { ChartScreen } from './components/ChartScreen'
@@ -27,7 +28,10 @@ function App() {
   } = useOrderBook()
 
   const [symbol, setSymbol] = useState('BTCUSDT')
-  const { fetchOrderBook, loading, error } = useOrderBookFetch(symbol)
+  const [dataSource, setDataSource] = useState<DataSource>(() => {
+    return (localStorage.getItem('ob_dataSource') as DataSource) || 'spot'
+  })
+  const { fetchOrderBook, loading, error } = useOrderBookFetch(symbol, dataSource)
 
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -43,6 +47,11 @@ function App() {
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Save data source preference
+  useEffect(() => {
+    localStorage.setItem('ob_dataSource', dataSource)
+  }, [dataSource])
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -124,7 +133,7 @@ function App() {
   const handleExport = useCallback(() => {
     const base = symbol.replace('USDT', '')
     const lines = [
-      `LIBRO DE ORDENES - ${base}/USDT`,
+      `LIBRO DE ORDENES - ${base}/USDT (${dataSource === 'futures' ? 'Futures' : 'Spot'})`,
       `Fecha: ${new Date().toLocaleString()}`,
       currentPrice ? `Precio Actual: $${currentPrice.toLocaleString()}` : '',
       `Punto de Entrada: ${computed.entryPoint2.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
@@ -146,12 +155,14 @@ function App() {
     } else {
       navigator.clipboard.writeText(text).then(() => alert('Datos copiados al portapapeles'))
     }
-  }, [symbol, currentPrice, computed, shortPrices, longPrices])
+  }, [symbol, dataSource, currentPrice, computed, shortPrices, longPrices])
 
   const base = symbol.replace('USDT', '')
 
   const fmt = (v: number) =>
     v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const sourceLabel = dataSource === 'futures' ? 'Futures' : 'Spot'
 
   // ─── Tab: Order Book ─────────────────────────────
   const renderOrderBook = () => (
@@ -172,12 +183,9 @@ function App() {
                 <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
                 {autoRefresh ? `${countdown}s` : 'Auto'}
               </button>
-              <button
-                onClick={handleExport}
-                className="p-2 rounded-full bg-gray-700/50 text-gray-400 active:bg-gray-600/50"
-              >
-                <IconShare size={16} />
-              </button>
+              <span className="text-[10px] text-gray-500 bg-gray-700/30 px-2 py-0.5 rounded-full">
+                {sourceLabel}
+              </span>
             </div>
             <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
           </div>
@@ -193,17 +201,8 @@ function App() {
               )}
             </div>
           ) : (
-            <div className="text-gray-500 text-sm mb-1">Toca para obtener datos</div>
+            <div className="text-gray-500 text-sm mb-1">Ve a Ajustes para obtener datos</div>
           )}
-
-          {/* Fetch button */}
-          <button
-            onClick={handleFetch}
-            disabled={loading}
-            className="w-full mt-3 bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-500/50 text-black font-bold text-sm py-2.5 rounded-xl transition-colors active:scale-[0.98]"
-          >
-            {loading ? 'Cargando...' : `Obtener Datos (${base})`}
-          </button>
           {error && (
             <div className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-1.5 mt-2">
               {error}
@@ -398,6 +397,59 @@ function App() {
     <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-4">
       <h2 className="text-lg font-bold text-white">Ajustes</h2>
 
+      {/* Fetch Data section */}
+      <div className="bg-[#1e2536] rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <IconRefresh size={18} className="text-yellow-400" />
+          <h3 className="text-sm font-bold text-white">Obtener Datos</h3>
+        </div>
+
+        {/* Data source selector */}
+        <div className="mb-3">
+          <div className="text-xs text-gray-400 mb-2">Fuente de datos:</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDataSource('spot')}
+              className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${
+                dataSource === 'spot'
+                  ? 'bg-yellow-500 text-black'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+              }`}
+            >
+              Spot
+            </button>
+            <button
+              onClick={() => setDataSource('futures')}
+              className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${
+                dataSource === 'futures'
+                  ? 'bg-yellow-500 text-black'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+              }`}
+            >
+              Futures
+            </button>
+          </div>
+        </div>
+
+        <button
+          onClick={handleFetch}
+          disabled={loading}
+          className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-500/50 text-black font-bold text-sm py-2.5 rounded-xl transition-colors active:scale-[0.98]"
+        >
+          {loading ? 'Cargando...' : `Obtener Datos (${base} - ${sourceLabel})`}
+        </button>
+        {error && (
+          <div className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-1.5 mt-2">
+            {error}
+          </div>
+        )}
+        {dataSource === 'futures' && (
+          <div className="text-[10px] text-gray-500 mt-2">
+            Futures puede dar error 451 si está bloqueado en tu región.
+          </div>
+        )}
+      </div>
+
       {/* Alert section */}
       <div className="bg-[#1e2536] rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -494,7 +546,7 @@ function App() {
 
       {/* Info */}
       <div className="text-center text-[10px] text-gray-600 py-2">
-        Order Book v2.0 — Datos de Binance Spot
+        Order Book v2.1 — Binance {sourceLabel}
       </div>
     </div>
   )

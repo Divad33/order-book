@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react'
 
+export type DataSource = 'spot' | 'futures'
+
 export interface PriceLevel {
   price: number
   volume: number
@@ -17,6 +19,11 @@ interface AggregatedLevel {
 }
 
 const COUNT = 16
+
+const SPOT_DEPTH = 'https://data-api.binance.vision/api/v3/depth'
+const SPOT_TICKER = 'https://data-api.binance.vision/api/v3/ticker/price'
+const FUTURES_DEPTH = 'https://fapi.binance.com/fapi/v1/depth'
+const FUTURES_TICKER = 'https://fapi.binance.com/fapi/v1/ticker/price'
 
 function calcStep(levels: [string, string][]): number {
   if (levels.length < 2) return 1
@@ -60,7 +67,7 @@ function aggregateByStep(
     }))
 }
 
-export function useOrderBookFetch(symbol: string) {
+export function useOrderBookFetch(symbol: string, source: DataSource) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,17 +75,20 @@ export function useOrderBookFetch(symbol: string) {
     setLoading(true)
     setError(null)
 
+    const depthUrl = source === 'futures'
+      ? `${FUTURES_DEPTH}?symbol=${symbol}&limit=1000`
+      : `${SPOT_DEPTH}?symbol=${symbol}&limit=5000`
+    const tickerUrl = source === 'futures'
+      ? `${FUTURES_TICKER}?symbol=${symbol}`
+      : `${SPOT_TICKER}?symbol=${symbol}`
+
     try {
       const [depthRes, tickerRes] = await Promise.all([
-        fetch(
-          `https://data-api.binance.vision/api/v3/depth?symbol=${symbol}&limit=5000`,
-        ),
-        fetch(
-          `https://data-api.binance.vision/api/v3/ticker/price?symbol=${symbol}`,
-        ),
+        fetch(depthUrl),
+        fetch(tickerUrl),
       ])
 
-      if (!depthRes.ok) throw new Error(`Binance error: ${depthRes.status}`)
+      if (!depthRes.ok) throw new Error(`Binance ${source} error: ${depthRes.status}`)
 
       const depthJson = await depthRes.json()
       const tickerJson = await tickerRes.json()
@@ -100,7 +110,7 @@ export function useOrderBookFetch(symbol: string) {
     } finally {
       setLoading(false)
     }
-  }, [symbol])
+  }, [symbol, source])
 
   return { fetchOrderBook, loading, error }
 }
