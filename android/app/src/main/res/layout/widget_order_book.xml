@@ -1,54 +1,138 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF1F2937"
-    android:padding="12dp"
-    android:id="@+id/widget_root">
-
-    <TextView
-        android:id="@+id/widget_symbol"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="BTC/USDT"
-        android:textColor="#FFFBBF24"
-        android:textSize="12sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/widget_price"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="$0.00"
-        android:textColor="#FFFFFFFF"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:layout_marginTop="2dp" />
+    android:background="@android:color/transparent"
+    android:padding="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="4dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#E61F2937"
+        android:padding="12dp">
 
-        <TextView
-            android:id="@+id/widget_short"
-            android:layout_width="0dp"
+        <!-- Header: symbol + refresh time -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="S: $0"
-            android:textColor="#FFEF4444"
-            android:textSize="10sp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
+            <TextView
+                android:id="@+id/widget_symbol"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="BTC / USDT"
+                android:textColor="#FFFBBF24"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--:--"
+                android:textColor="#99FFFFFF"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <!-- Current price -->
         <TextView
-            android:id="@+id/widget_long"
-            android:layout_width="0dp"
+            android:id="@+id/widget_price"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="L: $0"
-            android:textColor="#FF22C55E"
-            android:textSize="10sp"
-            android:gravity="end" />
+            android:text="Cargando..."
+            android:textColor="#FFFFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp" />
+
+        <!-- Short / Long labels -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SHORT"
+                    android:textColor="#99EF4444"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/widget_short"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textColor="#FFEF4444"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="end">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LONG"
+                    android:textColor="#9922C55E"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/widget_long"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textColor="#FF22C55E"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Entry point -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp"
+            android:background="#33FBBF24"
+            android:padding="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Entrada"
+                android:textColor="#CCFBBF24"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/widget_entry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="#FFFBBF24"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>
