@@ -66,8 +66,8 @@ public class OrderBookWidget extends AppWidgetProvider {
                 double currentPrice = Double.parseDouble(priceObj.getString("price"));
                 Log.d(TAG, "Current price: " + currentPrice);
 
-                // Fetch depth
-                String depthJson = fetchUrl("https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=5000");
+                // Fetch depth (limit=500 for faster widget loading)
+                String depthJson = fetchUrl("https://data-api.binance.vision/api/v3/depth?symbol=BTCUSDT&limit=500");
                 JSONObject depthObj = new JSONObject(depthJson);
 
                 // Parse asks and bids using JSONArray
@@ -140,18 +140,18 @@ public class OrderBookWidget extends AppWidgetProvider {
                     views.setTextViewText(R.id.widget_entry, entryStr);
                     views.setTextViewText(R.id.widget_time, timeStr);
 
-                    // Click to open app
+                    // Click widget body to open app
                     Intent openApp = new Intent(context, MainActivity.class);
                     PendingIntent pi = PendingIntent.getActivity(context, 0, openApp,
                             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                     views.setOnClickPendingIntent(R.id.widget_root, pi);
 
-                    // Click price to refresh
+                    // Click refresh button (⟳) to reload data
                     Intent refresh = new Intent(context, OrderBookWidget.class);
                     refresh.setAction(ACTION_REFRESH);
                     PendingIntent refreshPi = PendingIntent.getBroadcast(context, 1, refresh,
                             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                    views.setOnClickPendingIntent(R.id.widget_price, refreshPi);
+                    views.setOnClickPendingIntent(R.id.widget_refresh, refreshPi);
 
                     mgr.updateAppWidget(widgetId, views);
                     Log.d(TAG, "Widget updated successfully");
@@ -163,11 +163,13 @@ public class OrderBookWidget extends AppWidgetProvider {
                     views.setTextViewText(R.id.widget_price, "Sin conexión");
                     views.setTextViewText(R.id.widget_time, "Toca para reintentar");
 
+                    // Also set refresh on the whole widget when in error state
                     Intent refresh = new Intent(context, OrderBookWidget.class);
                     refresh.setAction(ACTION_REFRESH);
                     PendingIntent refreshPi = PendingIntent.getBroadcast(context, 1, refresh,
                             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                     views.setOnClickPendingIntent(R.id.widget_root, refreshPi);
+                    views.setOnClickPendingIntent(R.id.widget_refresh, refreshPi);
 
                     mgr.updateAppWidget(widgetId, views);
                 });

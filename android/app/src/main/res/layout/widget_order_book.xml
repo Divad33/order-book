@@ -4,135 +4,142 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/transparent"
-    android:padding="8dp">
+    android:background="@drawable/widget_bg"
+    android:padding="10dp">
 
+    <!-- Header: symbol + time + refresh button -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="#E61F2937"
-        android:padding="12dp">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-        <!-- Header: symbol + refresh time -->
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/widget_symbol"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:layout_weight="1"
+            android:text="BTC / USDT"
+            android:textColor="#FFFBBF24"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--:--"
+            android:textColor="#99FFFFFF"
+            android:textSize="8sp"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⟳"
+            android:textColor="#CCFFFFFF"
+            android:textSize="16sp"
+            android:background="@drawable/widget_refresh_bg"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Current price -->
+    <TextView
+        android:id="@+id/widget_price"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cargando..."
+        android:textColor="#FFFFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginTop="2dp" />
+
+    <!-- Short / Long row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/widget_symbol"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="BTC / USDT"
-                android:textColor="#FFFBBF24"
-                android:textSize="11sp"
+                android:text="SHORT"
+                android:textColor="#99EF4444"
+                android:textSize="7sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/widget_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="--:--"
-                android:textColor="#99FFFFFF"
-                android:textSize="9sp" />
-        </LinearLayout>
-
-        <!-- Current price -->
-        <TextView
-            android:id="@+id/widget_price"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Cargando..."
-            android:textColor="#FFFFFFFF"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:layout_marginTop="4dp" />
-
-        <!-- Short / Long labels -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="6dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SHORT"
-                    android:textColor="#99EF4444"
-                    android:textSize="8sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/widget_short"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="--"
-                    android:textColor="#FFEF4444"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="end">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="LONG"
-                    android:textColor="#9922C55E"
-                    android:textSize="8sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/widget_long"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="--"
-                    android:textColor="#FF22C55E"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- Entry point -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="4dp"
-            android:background="#33FBBF24"
-            android:padding="4dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Entrada"
-                android:textColor="#CCFBBF24"
-                android:textSize="9sp" />
-
-            <TextView
-                android:id="@+id/widget_entry"
+                android:id="@+id/widget_short"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="--"
-                android:textColor="#FFFBBF24"
+                android:textColor="#FFEF4444"
                 android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="end">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LONG"
+                android:textColor="#9922C55E"
+                android:textSize="7sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_long"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="#FF22C55E"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Entry point -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/widget_entry_bg"
+        android:padding="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Entrada"
+            android:textColor="#CCFBBF24"
+            android:textSize="8sp" />
+
+        <TextView
+            android:id="@+id/widget_entry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--"
+            android:textColor="#FFFBBF24"
+            android:textSize="10sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>
