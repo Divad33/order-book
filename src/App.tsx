@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useOrderBook } from './hooks/useOrderBook'
-import { useOrderBookFetch, type FetchSource } from './hooks/useOrderBookFetch'
+import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { BlockCard } from './components/BlockCard'
 import { FetchPanel } from './components/FetchPanel'
@@ -19,13 +19,7 @@ function App() {
     loadPrices,
   } = useOrderBook()
 
-  const [source, setSource] = useState<FetchSource>('okx')
-  const [coinglassApiKey, setCoinglassApiKey] = useState('')
-
-  const { fetchOrderBook, loading, error } = useOrderBookFetch({
-    source,
-    coinglassApiKey,
-  })
+  const { fetchOrderBook, loading, error } = useOrderBookFetch()
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -51,10 +45,6 @@ function App() {
         onFetch={handleFetch}
         loading={loading}
         error={error}
-        source={source}
-        onSourceChange={setSource}
-        coinglassApiKey={coinglassApiKey}
-        onCoinglassApiKeyChange={setCoinglassApiKey}
       />
 
       {/* Entry Point Banner */}

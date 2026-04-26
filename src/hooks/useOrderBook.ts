@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 
 export interface OrderBookState {
   shortPrices: number[]
@@ -16,6 +16,8 @@ export interface ComputedBlocks {
   entryPoint2: number
 }
 
+const STORAGE_KEY = 'order-book-state'
+
 const DEFAULT_SHORT = [
   79600, 79500, 79400, 79300, 79200, 79100, 79000, 78900, 78800, 78700, 78600,
   78500, 78400, 78300, 78200, 78100,
@@ -26,16 +28,39 @@ const DEFAULT_LONG = [
   76900, 76800, 76700, 76600, 76500,
 ]
 
+function loadSaved(): OrderBookState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (
+      Array.isArray(parsed.shortPrices) &&
+      Array.isArray(parsed.longPrices) &&
+      parsed.shortPrices.length > 0 &&
+      parsed.longPrices.length > 0
+    ) {
+      return parsed as OrderBookState
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 function average(nums: number[]): number {
-  if (nums.length === 0) return 0
-  return nums.reduce((a, b) => a + b, 0) / nums.length
+  const valid = nums.filter((n) => !isNaN(n) && isFinite(n))
+  if (valid.length === 0) return 0
+  return valid.reduce((a, b) => a + b, 0) / valid.length
 }
 
 export function useOrderBook() {
-  const [state, setState] = useState<OrderBookState>({
-    shortPrices: DEFAULT_SHORT,
-    longPrices: DEFAULT_LONG,
+  const [state, setState] = useState<OrderBookState>(() => {
+    return loadSaved() ?? { shortPrices: DEFAULT_SHORT, longPrices: DEFAULT_LONG }
   })
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  }, [state])
 
   const updateShortPrice = useCallback((index: number, value: number) => {
     setState((prev) => {
@@ -82,34 +107,45 @@ export function useOrderBook() {
   }, [])
 
   const computed = useMemo<ComputedBlocks>(() => {
-    const avgShort = average(state.shortPrices)
-    const avgLong = average(state.longPrices)
+    const shortList = state.shortPrices
+    const longList = state.longPrices
 
-    // F3 = AVERAGE(F6, F15) = AVERAGE(avgShort, avgLong)
+    // F6 = AVERAGE(B4:B35) = average of all SHORT prices
+    const avgShort = average(shortList)
+
+    // F15 = AVERAGE(D4:D35) = average of all LONG prices
+    const avgLong = average(longList)
+
+    // F3 = AVERAGE(F6, F15) = average of avgShort and avgLong
     const f3 = average([avgShort, avgLong])
 
-    // G3 = F15 = avgLong
-    // G2 = AVERAGE(F3, G3, F15, F6) = AVERAGE(f3, avgLong, avgLong, avgShort)
-    const entryPoint = average([f3, avgLong, avgLong, avgShort])
+    // G2 (PUNTO DE ENTRADA) = AVERAGE(F3, G3, F15, F6)
+    //   where G3 = F15 = avgLong
+    // = AVERAGE(f3, avgLong, avgLong, avgShort)
+    const entryPoint = (f3 + avgLong + avgLong + avgShort) / 4
 
     // BLOQUE TOPE SHORT = F6 = avgShort
     const bloqueTopeShort = avgShort
 
-    // BLOQUE DE SHORT = F9 = AVERAGE(F3, F15, F6, F6) = AVERAGE(f3, avgLong, avgShort, avgShort)
-    const bloqueDeShort = average([f3, avgLong, avgShort, avgShort])
+    // BLOQUE DE SHORT = F9 = AVERAGE(F3, F15, F6, F6)
+    const bloqueDeShort = (f3 + avgLong + avgShort + avgShort) / 4
 
-    // BLOQUE DE LONG = F12 = AVERAGE(F3, F15, F15, F6) = AVERAGE(f3, avgLong, avgLong, avgShort)
-    const bloqueDeLong = average([f3, avgLong, avgLong, avgShort])
+    // BLOQUE DE LONG = F12 = AVERAGE(F3, F15, F15, F6)
+    const bloqueDeLong = (f3 + avgLong + avgLong + avgShort) / 4
 
     // BLOQUE TOPE LONG = F15 = avgLong
     const bloqueTopeLong = avgLong
 
-    // F30 = B11 (shortPrices index 7, i.e., 8th value)
-    const f30 = state.shortPrices[7] ?? 0
-    // F31 = D11 (longPrices index 7)
-    const f31 = state.longPrices[7] ?? 0
+    // F30 = B11 (8th SHORT value, index 7)
+    // F31 = D11 (8th LONG value, index 7)
+    // Use middle element as fallback when list has fewer than 8 items
+    const shortIdx = Math.min(7, shortList.length - 1)
+    const longIdx = Math.min(7, longList.length - 1)
+    const f30 = shortList[shortIdx] ?? avgShort
+    const f31 = longList[longIdx] ?? avgLong
+
     // F28 = AVERAGE(F3, F30, F31)
-    const entryPoint2 = average([f3, f30, f31])
+    const entryPoint2 = (f3 + f30 + f31) / 3
 
     return {
       avgShort,
