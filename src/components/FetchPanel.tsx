@@ -1,6 +1,6 @@
 import { type FetchSource, SOURCE_LABELS } from '../hooks/useOrderBookFetch'
 
-const SOURCES: FetchSource[] = ['binance-futures', 'binance-spot', 'okx']
+const SOURCES: FetchSource[] = ['binance-futures', 'binance-spot']
 
 interface FetchPanelProps {
   onFetch: () => void
@@ -27,7 +27,7 @@ export function FetchPanel({
             onClick={() => onSourceChange(s)}
             className={`flex-1 text-xs py-1.5 rounded font-semibold transition-colors ${
               source === s
-                ? 'bg-blue-600 text-white'
+                ? 'bg-yellow-600 text-white'
                 : 'bg-gray-700 text-gray-300 active:bg-gray-600'
             }`}
           >
