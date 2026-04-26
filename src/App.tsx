@@ -160,7 +160,6 @@ function App() {
       <div className="px-4 pt-4 pb-2">
         <div className="bg-[#1e2536] rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
@@ -180,6 +179,7 @@ function App() {
                 <IconShare size={16} />
               </button>
             </div>
+            <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
           </div>
 
           {/* Current Price */}
