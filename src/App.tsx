@@ -9,14 +9,11 @@ import { ChartScreen } from './components/ChartScreen'
 import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
-import { IconRefresh, IconShare, IconBell, IconSun, IconMoon, IconStar, IconStarFilled, IconSignal } from './components/Icons'
-import { useTheme } from './ThemeContext'
+import { IconRefresh, IconShare, IconBell, IconStar, IconStarFilled, IconSignal } from './components/Icons'
 
 const AUTO_REFRESH_INTERVAL = 30_000
 
 function App() {
-  const { colors, toggle: toggleTheme, isDark } = useTheme()
-
   const {
     shortPrices,
     longPrices,
@@ -239,7 +236,7 @@ function App() {
   // Buy/sell signal based on current price vs order book levels
   const signal = useMemo<{ type: 'buy' | 'sell' | 'neutral'; label: string; color: string }>(() => {
     if (currentPrice === null || computed.entryPoint2 === 0) {
-      return { type: 'neutral', label: 'SIN DATOS', color: isDark ? '#6b7280' : '#9ca3af' }
+      return { type: 'neutral', label: 'SIN DATOS', color: '#6b7280' }
     }
     const entry = computed.entryPoint2
     const bLong = computed.bloqueDeLong
@@ -265,8 +262,8 @@ function App() {
     if (currentPrice > entry) {
       return { type: 'sell', label: 'TENDENCIA VENTA', color: '#fca5a5' }
     }
-    return { type: 'neutral', label: 'NEUTRAL', color: isDark ? '#9ca3af' : '#6b7280' }
-  }, [currentPrice, computed, isDark])
+    return { type: 'neutral', label: 'NEUTRAL', color: '#9ca3af' }
+  }, [currentPrice, computed])
 
   // Build overlay lines for the chart (5 order book levels)
   const chartOverlayLines = useMemo<OverlayLine[]>(() => {
@@ -306,9 +303,9 @@ function App() {
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors shrink-0"
                   style={{
                     backgroundColor: isActive
-                      ? (isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.15)')
-                      : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
-                    color: isActive ? '#fbbf24' : colors.textSecondary,
+                      ? 'rgba(251,191,36,0.2)'
+                      : 'rgba(255,255,255,0.05)',
+                    color: isActive ? '#fbbf24' : '#9ca3af',
                     border: isActive ? '1px solid rgba(251,191,36,0.3)' : '1px solid transparent',
                   }}
                 >
@@ -322,7 +319,7 @@ function App() {
 
       {/* Symbol + Price Card */}
       <div className="px-4 pt-2 pb-2">
-        <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <button
@@ -332,12 +329,12 @@ function App() {
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                     : 'text-gray-400 border'
                 }`}
-                style={!autoRefresh ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(75,85,99,0.3)' : 'rgba(209,213,219,0.5)' } : undefined}
+                style={!autoRefresh ? { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(75,85,99,0.3)' } : undefined}
               >
                 <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
                 {autoRefresh ? `${countdown}s` : 'Auto'}
               </button>
-              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textMuted }}>
+              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#6b7280' }}>
                 {sourceLabel}
               </span>
               <button
@@ -347,7 +344,7 @@ function App() {
                 {favorites.includes(symbol) ? (
                   <IconStarFilled size={16} className="text-yellow-400" />
                 ) : (
-                  <IconStar size={16} style={{ color: colors.textMuted }} />
+                  <IconStar size={16} style={{ color: '#6b7280' }} />
                 )}
               </button>
             </div>
@@ -357,15 +354,15 @@ function App() {
           {/* Current Price */}
           {currentPrice !== null ? (
             <div className="mb-1">
-              <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: colors.text }}>
+              <span className="text-3xl font-bold tabular-nums tracking-tight text-white">
                 ${currentPrice.toLocaleString()}
               </span>
               {lastUpdate && (
-                <span className="text-xs ml-2" style={{ color: colors.textMuted }}>{lastUpdate}</span>
+                <span className="text-xs ml-2" style={{ color: '#6b7280' }}>{lastUpdate}</span>
               )}
             </div>
           ) : (
-            <div className="text-sm mb-1" style={{ color: colors.textMuted }}>Ve a Ajustes para obtener datos</div>
+            <div className="text-sm mb-1" style={{ color: '#6b7280' }}>Ve a Ajustes para obtener datos</div>
           )}
           {error && (
             <div className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-1.5 mt-2">
@@ -384,16 +381,16 @@ function App() {
               <div className="text-xs font-bold tracking-wider" style={{ color: signal.color }}>
                 {signal.label}
               </div>
-              <div className="text-[10px] mt-0.5" style={{ color: colors.textMuted }}>
+              <div className="text-[10px] mt-0.5" style={{ color: '#6b7280' }}>
                 {signal.type === 'buy' ? 'Precio cerca de zona de compra' : signal.type === 'sell' ? 'Precio cerca de zona de venta' : 'Esperando datos'}
               </div>
             </div>
             {dominance && (
               <div className="text-right">
-                <div className="text-[10px]" style={{ color: colors.textMuted }}>Dominancia</div>
+                <div className="text-[10px]" style={{ color: '#6b7280' }}>Dominancia</div>
                 <div className="flex items-center gap-1 text-[10px] font-bold">
                   <span className="text-green-400">{dominance.buyPct}%</span>
-                  <span style={{ color: colors.textMuted }}>|</span>
+                  <span style={{ color: '#6b7280' }}>|</span>
                   <span className="text-red-400">{dominance.sellPct}%</span>
                 </div>
               </div>
@@ -405,7 +402,7 @@ function App() {
       {/* Dominance Bar */}
       {dominance && (
         <div className="px-4 pb-2">
-          <div className="rounded-xl overflow-hidden h-1.5 flex" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+          <div className="rounded-xl overflow-hidden h-1.5 flex" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
             <div className="bg-green-500 transition-all duration-500" style={{ width: `${dominance.buyPct}%` }} />
             <div className="bg-red-500 transition-all duration-500" style={{ width: `${dominance.sellPct}%` }} />
           </div>
@@ -430,25 +427,25 @@ function App() {
 
       {/* Blocks Grid */}
       <div className="grid grid-cols-2 gap-2 px-4 pb-2">
-        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
           <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
             Bloque Tope Short
           </div>
           <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueTopeShort)}</div>
         </div>
-        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
           <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
             Bloque de Short
           </div>
           <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueDeShort)}</div>
         </div>
-        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
           <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
             Bloque de Long
           </div>
           <div className="text-sm font-bold text-green-400 tabular-nums">{fmt(computed.bloqueDeLong)}</div>
         </div>
-        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
           <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
             Bloque Tope Long
           </div>
@@ -464,7 +461,7 @@ function App() {
             <div className="bg-red-500/20 border border-red-500/20 text-red-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Short
             </div>
-            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: colors.card }}>
+            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: '#1e2536' }}>
               {shortPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -492,7 +489,7 @@ function App() {
             <div className="bg-green-500/20 border border-green-500/20 text-green-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Long
             </div>
-            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: colors.card }}>
+            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: '#1e2536' }}>
               {longPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -519,13 +516,13 @@ function App() {
 
       {/* Averages footer */}
       <div className="px-4 pb-4">
-        <div className="rounded-xl px-4 py-2.5 flex justify-between text-xs" style={{ backgroundColor: colors.card }}>
+        <div className="rounded-xl px-4 py-2.5 flex justify-between text-xs" style={{ backgroundColor: '#1e2536' }}>
           <div>
-            <span style={{ color: colors.textMuted }}>Prom. Short: </span>
+            <span style={{ color: '#6b7280' }}>Prom. Short: </span>
             <span className="font-bold text-red-400 tabular-nums">{fmt(computed.avgShort)}</span>
           </div>
           <div>
-            <span style={{ color: colors.textMuted }}>Prom. Long: </span>
+            <span style={{ color: '#6b7280' }}>Prom. Long: </span>
             <span className="font-bold text-green-400 tabular-nums">{fmt(computed.avgLong)}</span>
           </div>
         </div>
@@ -545,9 +542,9 @@ function App() {
     const reversed = [...history].reverse()
     return (
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
-        <h2 className="text-lg font-bold mb-3" style={{ color: colors.text }}>Historial</h2>
+        <h2 className="text-lg font-bold mb-3" style={{ color: '#ffffff' }}>Historial</h2>
         {reversed.length === 0 ? (
-          <div className="text-center py-12 text-sm" style={{ color: colors.textMuted }}>
+          <div className="text-center py-12 text-sm" style={{ color: '#6b7280' }}>
             Aún no hay historial. Obtén datos para empezar.
           </div>
         ) : (
@@ -557,32 +554,32 @@ function App() {
               const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
               return (
-                <div key={i} className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+                <div key={i} className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-2 py-0.5 rounded-full">
                       {e.symbol.replace('USDT', '')}
                     </span>
-                    <span className="text-xs" style={{ color: colors.textMuted }}>{date} {time}</span>
+                    <span className="text-xs" style={{ color: '#6b7280' }}>{date} {time}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span style={{ color: colors.textMuted }}>Precio: </span>
-                      <span className="font-bold" style={{ color: colors.text }}>{e.currentPrice.toLocaleString()}</span>
+                      <span style={{ color: '#6b7280' }}>Precio: </span>
+                      <span className="font-bold" style={{ color: '#ffffff' }}>{e.currentPrice.toLocaleString()}</span>
                     </div>
                     <div>
-                      <span style={{ color: colors.textMuted }}>Entrada: </span>
+                      <span style={{ color: '#6b7280' }}>Entrada: </span>
                       <span className="text-yellow-400 font-bold">
                         {e.entryPoint.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: colors.textMuted }}>Short: </span>
+                      <span style={{ color: '#6b7280' }}>Short: </span>
                       <span className="text-red-400 font-bold">
                         {e.avgShort.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: colors.textMuted }}>Long: </span>
+                      <span style={{ color: '#6b7280' }}>Long: </span>
                       <span className="text-green-400 font-bold">
                         {e.avgLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
@@ -600,39 +597,18 @@ function App() {
   // ─── Tab: Settings (Alerts + Config) ─────────────
   const renderSettings = () => (
     <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-4">
-      <h2 className="text-lg font-bold" style={{ color: colors.text }}>Ajustes</h2>
-
-      {/* Theme toggle */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
-        <div className="flex items-center gap-2 mb-3">
-          {isDark ? <IconMoon size={18} className="text-yellow-400" /> : <IconSun size={18} className="text-yellow-500" />}
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Apariencia</h3>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: colors.textSecondary }}>{isDark ? 'Modo Oscuro' : 'Modo Claro'}</span>
-          <button
-            onClick={toggleTheme}
-            className="relative w-11 h-6 rounded-full transition-colors"
-            style={{ backgroundColor: isDark ? '#fbbf24' : '#6b7280' }}
-          >
-            <div
-              className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
-              style={{ transform: isDark ? 'translateX(22px)' : 'translateX(2px)' }}
-            />
-          </button>
-        </div>
-      </div>
+      <h2 className="text-lg font-bold" style={{ color: '#ffffff' }}>Ajustes</h2>
 
       {/* Fetch Data section */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
         <div className="flex items-center gap-2 mb-3">
           <IconRefresh size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Obtener Datos</h3>
+          <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Obtener Datos</h3>
         </div>
 
         {/* Data source selector */}
         <div className="mb-3">
-          <div className="text-xs mb-2" style={{ color: colors.textSecondary }}>Fuente de datos:</div>
+          <div className="text-xs mb-2" style={{ color: '#9ca3af' }}>Fuente de datos:</div>
           <div className="flex gap-2">
             <button
               onClick={() => setDataSource('spot')}
@@ -641,7 +617,7 @@ function App() {
                   ? 'bg-yellow-500 text-black'
                   : ''
               }`}
-              style={dataSource !== 'spot' ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` } : undefined}
+              style={dataSource !== 'spot' ? { backgroundColor: 'rgba(255,255,255,0.05)', color: '#9ca3af', border: '1px solid #374151' } : undefined}
             >
               Spot
             </button>
@@ -652,7 +628,7 @@ function App() {
                   ? 'bg-yellow-500 text-black'
                   : ''
               }`}
-              style={dataSource !== 'futures' ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` } : undefined}
+              style={dataSource !== 'futures' ? { backgroundColor: 'rgba(255,255,255,0.05)', color: '#9ca3af', border: '1px solid #374151' } : undefined}
             >
               Futures
             </button>
@@ -672,17 +648,17 @@ function App() {
           </div>
         )}
         {dataSource === 'futures' && (
-          <div className="text-[10px] mt-2" style={{ color: colors.textMuted }}>
+          <div className="text-[10px] mt-2" style={{ color: '#6b7280' }}>
             Futures puede dar error 451 si está bloqueado en tu región.
           </div>
         )}
       </div>
 
       {/* Alert section */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
         <div className="flex items-center gap-2 mb-3">
           <IconBell size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Alerta de Precio</h3>
+          <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Alerta de Precio</h3>
         </div>
 
         {alertPrice !== null && (
@@ -700,12 +676,12 @@ function App() {
         )}
 
         {/* Sound toggle */}
-        <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}` }}>
-          <span className="text-xs" style={{ color: colors.textSecondary }}>Sonido de alerta</span>
+        <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <span className="text-xs" style={{ color: '#9ca3af' }}>Sonido de alerta</span>
           <button
             onClick={() => setAlertSound(!alertSound)}
             className="relative w-11 h-6 rounded-full transition-colors"
-            style={{ backgroundColor: alertSound ? '#22c55e' : (isDark ? '#374151' : '#d1d5db') }}
+            style={{ backgroundColor: alertSound ? '#22c55e' : '#374151' }}
           >
             <div
               className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
@@ -715,13 +691,13 @@ function App() {
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs" style={{ color: colors.textSecondary }}>Notificar cuando {base} llegue a:</div>
+          <div className="text-xs" style={{ color: '#9ca3af' }}>Notificar cuando {base} llegue a:</div>
           <div className="flex gap-2">
             <select
               value={alertDirection}
               onChange={(e) => setAlertDirection(e.target.value as 'above' | 'below')}
               className="text-xs rounded-lg px-3 py-2 outline-none"
-              style={{ backgroundColor: colors.inputBg, color: colors.text, border: `1px solid ${colors.inputBorder}` }}
+              style={{ backgroundColor: '#1f2937', color: '#ffffff', border: '1px solid #374151' }}
             >
               <option value="above">≥ Sube a</option>
               <option value="below">≤ Baja a</option>
@@ -732,7 +708,7 @@ function App() {
               onChange={(e) => setAlertDraft(e.target.value)}
               placeholder="Precio"
               className="flex-1 text-xs rounded-lg px-3 py-2 outline-none"
-              style={{ backgroundColor: colors.inputBg, color: colors.text, border: `1px solid ${colors.inputBorder}` }}
+              style={{ backgroundColor: '#1f2937', color: '#ffffff', border: '1px solid #374151' }}
             />
           </div>
           <button
@@ -748,17 +724,17 @@ function App() {
       </div>
 
       {/* Auto-refresh section */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
         <div className="flex items-center gap-2 mb-3">
           <IconRefresh size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Auto-Refresh</h3>
+          <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Auto-Refresh</h3>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: colors.textSecondary }}>Actualizar cada 30 segundos</span>
+          <span className="text-xs" style={{ color: '#9ca3af' }}>Actualizar cada 30 segundos</span>
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className="relative w-11 h-6 rounded-full transition-colors"
-            style={{ backgroundColor: autoRefresh ? '#22c55e' : (isDark ? '#374151' : '#d1d5db') }}
+            style={{ backgroundColor: autoRefresh ? '#22c55e' : '#374151' }}
           >
             <div
               className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
@@ -774,17 +750,17 @@ function App() {
       </div>
 
       {/* Favorites management */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
         <div className="flex items-center gap-2 mb-3">
           <IconStarFilled size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Pares Favoritos</h3>
+          <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Pares Favoritos</h3>
         </div>
         <div className="flex flex-wrap gap-2">
           {favorites.map((fav) => (
             <div
               key={fav}
               className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: isDark ? 'rgba(251,191,36,0.1)' : 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}
+              style={{ backgroundColor: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}
             >
               <span className="text-yellow-400">{fav.replace('USDT', '')}</span>
               <button
@@ -796,35 +772,35 @@ function App() {
             </div>
           ))}
         </div>
-        <div className="text-[10px] mt-2" style={{ color: colors.textMuted }}>
+        <div className="text-[10px] mt-2" style={{ color: '#6b7280' }}>
           Toca la estrella ★ en la pantalla principal para agregar/quitar favoritos.
         </div>
       </div>
 
       {/* Export section */}
-      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+      <div className="rounded-2xl p-4" style={{ backgroundColor: '#1e2536' }}>
         <div className="flex items-center gap-2 mb-3">
           <IconShare size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Exportar Datos</h3>
+          <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Exportar Datos</h3>
         </div>
         <button
           onClick={handleExport}
           className="w-full text-sm font-medium py-2.5 rounded-xl transition-colors active:opacity-80"
-          style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` }}
+          style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#9ca3af', border: '1px solid #374151' }}
         >
           Compartir Order Book
         </button>
       </div>
 
       {/* Info */}
-      <div className="text-center text-[10px] py-2" style={{ color: colors.textMuted }}>
+      <div className="text-center text-[10px] py-2" style={{ color: '#6b7280' }}>
         Order Book v3.0 — Binance {sourceLabel}
       </div>
     </div>
   )
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: colors.bg, color: colors.text }}>
+    <div className="h-screen bg-[#141821] text-white flex flex-col overflow-hidden">
       {/* Content */}
       {activeTab === 'orderbook' && renderOrderBook()}
       {activeTab === 'chart' && renderChart()}
