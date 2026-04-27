@@ -1,15 +1,16 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
-import { ChartScreen } from './components/ChartScreen'
 import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
 import { IconRefresh, IconShare, IconBell, IconStar, IconStarFilled, IconSignal } from './components/Icons'
+
+const ChartScreen = lazy(() => import('./components/ChartScreen').then(m => ({ default: m.ChartScreen })))
 
 const AUTO_REFRESH_INTERVAL = 30_000
 
@@ -533,7 +534,9 @@ function App() {
   // ─── Tab: Chart ──────────────────────────────────
   const renderChart = () => (
     <div className="flex-1 flex flex-col">
-      <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} />
+      <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: '#141821' }}><span className="text-gray-500">Cargando gráfico...</span></div>}>
+        <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} />
+      </Suspense>
     </div>
   )
 
