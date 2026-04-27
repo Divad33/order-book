@@ -5,6 +5,7 @@ import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
+import { Calculator } from './components/Calculator'
 import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
@@ -834,6 +835,7 @@ function App() {
       {/* Content */}
       {activeTab === 'orderbook' && renderOrderBook()}
       {activeTab === 'chart' && renderChart()}
+      {activeTab === 'calc' && <Calculator entryPriceFromOrderBook={computed.entryPoint2 || null} />}
       {activeTab === 'history' && renderHistory()}
       {activeTab === 'settings' && renderSettings()}
 

@@ -1,6 +1,6 @@
-import { IconOrderBook, IconChart, IconHistory, IconSettings } from './Icons'
+import { IconOrderBook, IconChart, IconCalculator, IconHistory, IconSettings } from './Icons'
 
-export type TabId = 'orderbook' | 'chart' | 'history' | 'settings'
+export type TabId = 'orderbook' | 'chart' | 'calc' | 'history' | 'settings'
 
 interface BottomNavProps {
   active: TabId
@@ -10,6 +10,7 @@ interface BottomNavProps {
 const tabs: { id: TabId; label: string; icon: typeof IconOrderBook }[] = [
   { id: 'orderbook', label: 'Orden', icon: IconOrderBook },
   { id: 'chart', label: 'Gráfico', icon: IconChart },
+  { id: 'calc', label: 'Calc', icon: IconCalculator },
   { id: 'history', label: 'Historial', icon: IconHistory },
   { id: 'settings', label: 'Ajustes', icon: IconSettings },
 ]
