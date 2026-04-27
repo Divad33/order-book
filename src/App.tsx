@@ -12,7 +12,7 @@ import { IconRefresh, IconShare, IconBell, IconStar, IconStarFilled, IconSignal 
 
 const ChartScreen = lazy(() => import('./components/ChartScreen').then(m => ({ default: m.ChartScreen })))
 
-const AUTO_REFRESH_INTERVAL = 30_000
+const REFRESH_INTERVALS = [30, 60] as const
 
 function App() {
   const {
@@ -37,6 +37,10 @@ function App() {
 
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [refreshInterval, setRefreshInterval] = useState<number>(() => {
+    const saved = localStorage.getItem('ob_refreshInterval')
+    return saved ? Number(saved) : 30
+  })
   const [countdown, setCountdown] = useState(0)
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
@@ -184,21 +188,25 @@ function App() {
   }, [handleFetch])
 
   useEffect(() => {
+    localStorage.setItem('ob_refreshInterval', String(refreshInterval))
+  }, [refreshInterval])
+
+  useEffect(() => {
     if (!autoRefresh) return
+    const ms = refreshInterval * 1000
     const initTimer = setTimeout(() => fetchRef.current(), 0)
-    const secs = AUTO_REFRESH_INTERVAL / 1000
     const startTime = Date.now()
-    intervalRef.current = setInterval(() => fetchRef.current(), AUTO_REFRESH_INTERVAL)
+    intervalRef.current = setInterval(() => fetchRef.current(), ms)
     countdownRef.current = setInterval(() => {
-      const elapsed = ((Date.now() - startTime) / 1000) % secs
-      setCountdown(Math.max(0, Math.round(secs - elapsed)))
+      const elapsed = ((Date.now() - startTime) / 1000) % refreshInterval
+      setCountdown(Math.max(0, Math.round(refreshInterval - elapsed)))
     }, 1000)
     return () => {
       clearTimeout(initTimer)
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (countdownRef.current) clearInterval(countdownRef.current)
     }
-  }, [autoRefresh])
+  }, [autoRefresh, refreshInterval])
 
   const handleExport = useCallback(() => {
     const base = symbol.replace('USDT', '')
@@ -732,8 +740,8 @@ function App() {
           <IconRefresh size={18} className="text-yellow-400" />
           <h3 className="text-sm font-bold" style={{ color: '#ffffff' }}>Auto-Refresh</h3>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: '#9ca3af' }}>Actualizar cada 30 segundos</span>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs" style={{ color: '#9ca3af' }}>Activar auto-refresh</span>
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className="relative w-11 h-6 rounded-full transition-colors"
@@ -744,6 +752,25 @@ function App() {
               style={{ transform: autoRefresh ? 'translateX(22px)' : 'translateX(2px)' }}
             />
           </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs" style={{ color: '#9ca3af' }}>Intervalo:</span>
+          <div className="flex gap-2">
+            {REFRESH_INTERVALS.map(s => (
+              <button
+                key={s}
+                onClick={() => setRefreshInterval(s)}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: refreshInterval === s ? '#22c55e20' : 'rgba(255,255,255,0.05)',
+                  color: refreshInterval === s ? '#22c55e' : '#9ca3af',
+                  border: refreshInterval === s ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(75,85,99,0.3)',
+                }}
+              >
+                {s}s
+              </button>
+            ))}
+          </div>
         </div>
         {autoRefresh && (
           <div className="text-xs text-green-400 mt-2">
