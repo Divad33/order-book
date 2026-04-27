@@ -6,6 +6,7 @@ import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
 import { Calculator } from './components/Calculator'
+import type { CalcResult, CalcNotification, OrderBookPrices } from './components/Calculator'
 import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
@@ -14,6 +15,23 @@ import { IconRefresh, IconShare, IconBell, IconStar, IconStarFilled, IconSignal 
 const ChartScreen = lazy(() => import('./components/ChartScreen').then(m => ({ default: m.ChartScreen })))
 
 const REFRESH_INTERVALS = [30, 60] as const
+
+interface OrderHistoryEntry {
+  id: string
+  symbol: string
+  position: 'LONG' | 'SHORT'
+  entryPrice: number
+  tpPrice: number
+  slPrice: number
+  numCoins: number
+  leverage: number
+  openTime: string
+  closeTime: string
+  closePrice: number
+  pnlUsd: number
+  pnlPct: number
+  result: 'tp' | 'sl' | 'manual'
+}
 
 function App() {
   const {
@@ -68,8 +86,94 @@ function App() {
   // Dominance state
   const [dominance, setDominance] = useState<{ buyPct: number; sellPct: number } | null>(null)
 
+  // Calculator state for chart overlay
+  const [calcResult, setCalcResult] = useState<CalcResult | null>(null)
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Funding rate
+  const [fundingRate, setFundingRate] = useState<number | null>(null)
+
+  useEffect(() => {
+    const fetchFunding = async () => {
+      try {
+        const res = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`)
+        if (res.ok) {
+          const data = await res.json()
+          setFundingRate(parseFloat(data.lastFundingRate))
+        }
+      } catch {
+        // Funding rate not available (e.g. error 451 for some regions)
+      }
+    }
+    fetchFunding()
+    const timer = setInterval(fetchFunding, 60000)
+    return () => clearInterval(timer)
+  }, [symbol])
+
+  // Calc order notifications and execution state
+  const [calcNotifications, setCalcNotifications] = useState<CalcNotification[]>([])
+  const [orderActive, setOrderActive] = useState(false)
+  const [orderStartPrice, setOrderStartPrice] = useState<number | null>(null)
+
+  // Order history
+  const [orderHistory, setOrderHistory] = useState<OrderHistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('ob_orderHistory')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('ob_orderHistory', JSON.stringify(orderHistory))
+  }, [orderHistory])
+
+  const handleOrderActive = useCallback((active: boolean) => {
+    if (active) {
+      setOrderActive(true)
+      setOrderStartPrice(currentPrice)
+    } else {
+      // Save order to history when closing
+      if (calcResult && calcResult.entryPrice > 0) {
+        const closeP = currentPrice ?? calcResult.entryPrice
+        const isLong = calcResult.position === 'LONG'
+        const pnlPct = isLong
+          ? ((closeP - calcResult.entryPrice) / calcResult.entryPrice) * 100
+          : ((calcResult.entryPrice - closeP) / calcResult.entryPrice) * 100
+        const pnlUsd = calcResult.numCoins * Math.abs(closeP - calcResult.entryPrice) * (pnlPct >= 0 ? 1 : -1)
+
+        let result: 'tp' | 'sl' | 'manual' = 'manual'
+        const tpDist = Math.abs(closeP - calcResult.tpNoRecompra)
+        const slDist = Math.abs(closeP - calcResult.lastSl)
+        const threshold = calcResult.entryPrice * 0.002
+        if (tpDist < threshold) result = 'tp'
+        else if (slDist < threshold) result = 'sl'
+
+        const entry: OrderHistoryEntry = {
+          id: Date.now().toString(),
+          symbol,
+          position: calcResult.position,
+          entryPrice: calcResult.entryPrice,
+          tpPrice: calcResult.tpNoRecompra,
+          slPrice: calcResult.lastSl,
+          numCoins: calcResult.numCoins,
+          leverage: calcResult.leverage,
+          openTime: orderStartPrice ? new Date().toISOString() : new Date().toISOString(),
+          closeTime: new Date().toISOString(),
+          closePrice: closeP,
+          pnlUsd,
+          pnlPct,
+          result,
+        }
+        setOrderHistory(prev => [entry, ...prev].slice(0, 50))
+      }
+      setOrderActive(false)
+      setOrderStartPrice(null)
+    }
+  }, [calcResult, currentPrice, symbol, orderStartPrice])
 
   // Save data source preference
   useEffect(() => {
@@ -115,6 +219,53 @@ function App() {
       // Audio not available
     }
   }, [alertSound])
+
+  // Monitor price vs calculator levels
+  const calcNotifiedRef = useRef<Set<string>>(new Set())
+  const prevCalcKeyRef = useRef<string>('')
+  const calcResultRef = useRef<CalcResult | null>(null)
+  useEffect(() => {
+    calcResultRef.current = calcResult
+  }, [calcResult])
+
+  const checkCalcLevels = useCallback((price: number) => {
+    const cr = calcResultRef.current
+    if (!cr || cr.entryPrice <= 0) return
+
+    const calcKey = `${cr.entryPrice}_${cr.position}`
+    if (calcKey !== prevCalcKeyRef.current) {
+      calcNotifiedRef.current = new Set()
+      prevCalcKeyRef.current = calcKey
+    }
+
+    const threshold = price * 0.001
+    const levels: { id: string; price: number; label: string; type: 'entry' | 'tp' | 'sl' | 'recompra' | 'liq' }[] = [
+      { id: 'calc_entry', price: cr.entryPrice, label: 'Entrada', type: 'entry' },
+      { id: 'calc_tp', price: cr.tpNoRecompra, label: 'Take Profit', type: 'tp' },
+      { id: 'calc_sl', price: cr.lastSl, label: 'Stop Loss', type: 'sl' },
+      { id: 'calc_liq', price: cr.liqPrice, label: 'Liquidación', type: 'liq' },
+    ]
+    cr.rows.forEach((row, idx) => {
+      if (row.recompraPrice > 0) {
+        levels.push({ id: `calc_rec_${idx}`, price: row.recompraPrice, label: `Recompra ${idx + 1}`, type: 'recompra' })
+      }
+    })
+
+    const newNotifs: CalcNotification[] = []
+    for (const level of levels) {
+      if (level.price <= 0 || calcNotifiedRef.current.has(level.id)) continue
+      if (Math.abs(price - level.price) <= threshold) {
+        playAlertSound()
+        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 200])
+        calcNotifiedRef.current.add(level.id)
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        newNotifs.push({ id: level.id, msg: `${level.label}: $${level.price.toFixed(2)} (${cr.position})`, time, type: level.type })
+      }
+    }
+    if (newNotifs.length > 0) {
+      setCalcNotifications(prev => [...newNotifs, ...prev].slice(0, 20))
+    }
+  }, [playAlertSound])
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -166,6 +317,9 @@ function App() {
         return next
       })
 
+      // Check calc order levels
+      checkCalcLevels(result.currentPrice)
+
       if (alertPrice !== null) {
         const triggered =
           alertDirection === 'above'
@@ -181,7 +335,7 @@ function App() {
         }
       }
     }
-  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection, playAlertSound])
+  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection, playAlertSound, checkCalcLevels])
 
   const fetchRef = useRef(handleFetch)
   useEffect(() => {
@@ -395,16 +549,26 @@ function App() {
                 {signal.type === 'buy' ? 'Precio cerca de zona de compra' : signal.type === 'sell' ? 'Precio cerca de zona de venta' : 'Esperando datos'}
               </div>
             </div>
-            {dominance && (
-              <div className="text-right">
-                <div className="text-[10px]" style={{ color: '#6b7280' }}>Dominancia</div>
-                <div className="flex items-center gap-1 text-[10px] font-bold">
-                  <span className="text-green-400">{dominance.buyPct}%</span>
-                  <span style={{ color: '#6b7280' }}>|</span>
-                  <span className="text-red-400">{dominance.sellPct}%</span>
+            <div className="text-right space-y-0.5">
+              {dominance && (
+                <div>
+                  <div className="text-[10px]" style={{ color: '#6b7280' }}>Dominancia</div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold">
+                    <span className="text-green-400">{dominance.buyPct}%</span>
+                    <span style={{ color: '#6b7280' }}>|</span>
+                    <span className="text-red-400">{dominance.sellPct}%</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+              {fundingRate !== null && (
+                <div>
+                  <div className="text-[10px]" style={{ color: '#6b7280' }}>Funding Rate</div>
+                  <div className="text-[10px] font-bold" style={{ color: fundingRate >= 0 ? '#22c55e' : '#ef4444' }}>
+                    {fundingRate >= 0 ? '+' : ''}{(fundingRate * 100).toFixed(4)}%
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -544,63 +708,226 @@ function App() {
   const renderChart = () => (
     <div className="flex-1 flex flex-col">
       <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: '#141821' }}><span className="text-gray-500">Cargando gráfico...</span></div>}>
-        <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} />
+        <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} activeOrder={orderActive && calcResult ? { calc: calcResult, currentPrice: currentPrice ?? 0 } : null} fundingRate={fundingRate} />
       </Suspense>
     </div>
   )
 
   // ─── Tab: History ────────────────────────────────
+  const [historyTab, setHistoryTab] = useState<'orders' | 'data'>('orders')
+
   const renderHistory = () => {
-    const reversed = [...history].reverse()
+    const wins = orderHistory.filter(o => o.pnlUsd > 0).length
+    const losses = orderHistory.filter(o => o.pnlUsd <= 0).length
+    const totalPnl = orderHistory.reduce((sum, o) => sum + o.pnlUsd, 0)
+    const winRate = orderHistory.length > 0 ? (wins / orderHistory.length * 100) : 0
+
     return (
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
         <h2 className="text-lg font-bold mb-3" style={{ color: '#ffffff' }}>Historial</h2>
-        {reversed.length === 0 ? (
-          <div className="text-center py-12 text-sm" style={{ color: '#6b7280' }}>
-            Aún no hay historial. Obtén datos para empezar.
-          </div>
+
+        {/* Sub-tabs */}
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => setHistoryTab('orders')}
+            className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors"
+            style={{
+              backgroundColor: historyTab === 'orders' ? 'rgba(251,191,36,0.2)' : '#1e2536',
+              color: historyTab === 'orders' ? '#fbbf24' : '#6b7280',
+              border: historyTab === 'orders' ? '1px solid rgba(251,191,36,0.3)' : '1px solid transparent',
+            }}
+          >
+            Órdenes
+          </button>
+          <button
+            onClick={() => setHistoryTab('data')}
+            className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors"
+            style={{
+              backgroundColor: historyTab === 'data' ? 'rgba(251,191,36,0.2)' : '#1e2536',
+              color: historyTab === 'data' ? '#fbbf24' : '#6b7280',
+              border: historyTab === 'data' ? '1px solid rgba(251,191,36,0.3)' : '1px solid transparent',
+            }}
+          >
+            Datos
+          </button>
+        </div>
+
+        {historyTab === 'orders' ? (
+          <>
+            {/* Stats summary */}
+            {orderHistory.length > 0 && (
+              <div className="rounded-xl p-3 mb-3 grid grid-cols-4 gap-2" style={{ backgroundColor: '#1e2536' }}>
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: '#6b7280' }}>Total</p>
+                  <p className="text-sm font-bold text-white">{orderHistory.length}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: '#6b7280' }}>Win Rate</p>
+                  <p className="text-sm font-bold" style={{ color: winRate >= 50 ? '#22c55e' : '#ef4444' }}>{winRate.toFixed(0)}%</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: '#6b7280' }}>W/L</p>
+                  <p className="text-sm font-bold">
+                    <span style={{ color: '#22c55e' }}>{wins}</span>
+                    <span style={{ color: '#6b7280' }}>/</span>
+                    <span style={{ color: '#ef4444' }}>{losses}</span>
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: '#6b7280' }}>P&L</p>
+                  <p className="text-sm font-bold" style={{ color: totalPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                    {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {orderHistory.length > 0 && (
+              <button
+                onClick={() => { if (confirm('¿Eliminar todo el historial de órdenes?')) setOrderHistory([]) }}
+                className="w-full mb-2 py-1.5 rounded-lg text-[10px] font-bold text-red-400"
+                style={{ backgroundColor: 'rgba(239,68,68,0.1)' }}
+              >
+                Eliminar todo
+              </button>
+            )}
+
+            {orderHistory.length === 0 ? (
+              <div className="text-center py-12 text-sm" style={{ color: '#6b7280' }}>
+                Aún no hay órdenes. Ejecuta una orden desde la calculadora.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {orderHistory.map(o => {
+                  const d = new Date(o.closeTime)
+                  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+                  const isWin = o.pnlUsd > 0
+                  const resultLabel = o.result === 'tp' ? 'TP' : o.result === 'sl' ? 'SL' : 'Manual'
+                  const resultColor = o.result === 'tp' ? '#22c55e' : o.result === 'sl' ? '#ef4444' : '#fbbf24'
+
+                  return (
+                    <div key={o.id} className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: o.position === 'LONG' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                              color: o.position === 'LONG' ? '#22c55e' : '#ef4444',
+                            }}>
+                            {o.position}
+                          </span>
+                          <span className="text-xs font-bold text-white">{o.symbol.replace('USDT', '')}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                            style={{ backgroundColor: `${resultColor}20`, color: resultColor }}>
+                            {resultLabel}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px]" style={{ color: '#6b7280' }}>{date} {time}</span>
+                          <button
+                            onClick={() => setOrderHistory(prev => prev.filter(x => x.id !== o.id))}
+                            className="text-gray-600 hover:text-red-400 text-xs px-1"
+                          >✕</button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-[10px] mb-2">
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Entrada</span>
+                          <p className="font-bold text-white">${o.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Cierre</span>
+                          <p className="font-bold text-white">${o.closePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>{o.leverage}x · {o.numCoins} mon</span>
+                          <p className="font-bold" style={{ color: isWin ? '#22c55e' : '#ef4444' }}>
+                            {isWin ? '+' : ''}{o.pnlUsd.toFixed(2)} ({isWin ? '+' : ''}{o.pnlPct.toFixed(2)}%)
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 text-[9px]">
+                        <span style={{ color: '#22c55e' }}>TP: ${o.tpPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span style={{ color: '#ef4444' }}>SL: ${o.slPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="space-y-2">
-            {reversed.map((e, i) => {
-              const d = new Date(e.timestamp)
-              const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
-              return (
-                <div key={i} className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-2 py-0.5 rounded-full">
-                      {e.symbol.replace('USDT', '')}
-                    </span>
-                    <span className="text-xs" style={{ color: '#6b7280' }}>{date} {time}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span style={{ color: '#6b7280' }}>Precio: </span>
-                      <span className="font-bold" style={{ color: '#ffffff' }}>{e.currentPrice.toLocaleString()}</span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6b7280' }}>Entrada: </span>
-                      <span className="text-yellow-400 font-bold">
-                        {e.entryPoint.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6b7280' }}>Short: </span>
-                      <span className="text-red-400 font-bold">
-                        {e.avgShort.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6b7280' }}>Long: </span>
-                      <span className="text-green-400 font-bold">
-                        {e.avgLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
+          <>
+            {history.length > 0 && (
+              <button
+                onClick={() => { if (confirm('¿Eliminar todo el historial de datos?')) { setHistory([]); saveHistory([]) } }}
+                className="w-full mb-2 py-1.5 rounded-lg text-[10px] font-bold text-red-400"
+                style={{ backgroundColor: 'rgba(239,68,68,0.1)' }}
+              >
+                Eliminar todo
+              </button>
+            )}
+            {(() => {
+              const reversed = [...history].reverse()
+              return reversed.length === 0 ? (
+                <div className="text-center py-12 text-sm" style={{ color: '#6b7280' }}>
+                  Aún no hay historial. Obtén datos para empezar.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {reversed.map((e, i) => {
+                    const d = new Date(e.timestamp)
+                    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+                    return (
+                      <div key={i} className="rounded-xl p-3" style={{ backgroundColor: '#1e2536' }}>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-2 py-0.5 rounded-full">
+                            {e.symbol.replace('USDT', '')}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs" style={{ color: '#6b7280' }}>{date} {time}</span>
+                            <button
+                              onClick={() => {
+                                const idx = history.length - 1 - i
+                                setHistory(prev => { const n = [...prev]; n.splice(idx, 1); saveHistory(n); return n })
+                              }}
+                              className="text-gray-600 hover:text-red-400 text-xs px-1"
+                            >✕</button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span style={{ color: '#6b7280' }}>Precio: </span>
+                            <span className="font-bold" style={{ color: '#ffffff' }}>{e.currentPrice.toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span style={{ color: '#6b7280' }}>Entrada: </span>
+                            <span className="text-yellow-400 font-bold">
+                              {e.entryPoint.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div>
+                            <span style={{ color: '#6b7280' }}>Short: </span>
+                            <span className="text-red-400 font-bold">
+                              {e.avgShort.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div>
+                            <span style={{ color: '#6b7280' }}>Long: </span>
+                            <span className="text-green-400 font-bold">
+                              {e.avgLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )
-            })}
-          </div>
+            })()}
+          </>
         )}
       </div>
     )
@@ -835,7 +1162,19 @@ function App() {
       {/* Content */}
       {activeTab === 'orderbook' && renderOrderBook()}
       {activeTab === 'chart' && renderChart()}
-      {activeTab === 'calc' && <Calculator entryPriceFromOrderBook={computed.entryPoint2 || null} />}
+      {activeTab === 'calc' && <Calculator
+        orderBookPrices={{
+          entrada: computed.entryPoint2,
+          bloqueLong: computed.bloqueDeLong,
+          bloqueTopeLong: computed.bloqueTopeLong,
+          bloqueShort: computed.bloqueDeShort,
+          bloqueTopeShort: computed.bloqueTopeShort,
+        } as OrderBookPrices}
+        onCalcResult={setCalcResult}
+        onOrderActive={handleOrderActive}
+        orderActive={orderActive}
+        notifications={calcNotifications}
+      />}
       {activeTab === 'history' && renderHistory()}
       {activeTab === 'settings' && renderSettings()}
 

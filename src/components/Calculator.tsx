@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { IconCalculator } from './Icons'
 
-type Position = 'LONG' | 'SHORT'
+export type Position = 'LONG' | 'SHORT'
 type OrderType = 'LIMITE' | 'MARKET'
 
-interface CalcInputs {
+export interface CalcInputs {
   position: Position
   rebuyPct: number
   coinPct: number
@@ -18,7 +18,7 @@ interface CalcInputs {
   decimals: number
 }
 
-interface RecompraRow {
+export interface RecompraRow {
   num: number
   recompraPrice: number
   coins: number
@@ -169,11 +169,43 @@ function fmt(n: number, dec: number): string {
   return n.toFixed(dec)
 }
 
-interface CalculatorProps {
-  entryPriceFromOrderBook?: number | null
+export interface CalcResult {
+  entryPrice: number
+  position: Position
+  tpNoRecompra: number
+  lastSl: number
+  liqPrice: number
+  numCoins: number
+  stopLossUsd: number
+  takeProfitPct: number
+  leverage: number
+  rows: RecompraRow[]
 }
 
-export function Calculator({ entryPriceFromOrderBook }: CalculatorProps) {
+export interface CalcNotification {
+  id: string
+  msg: string
+  time: string
+  type: 'entry' | 'tp' | 'sl' | 'recompra' | 'liq'
+}
+
+export interface OrderBookPrices {
+  entrada: number
+  bloqueLong: number
+  bloqueTopeLong: number
+  bloqueShort: number
+  bloqueTopeShort: number
+}
+
+interface CalculatorProps {
+  orderBookPrices?: OrderBookPrices | null
+  onCalcResult?: (result: CalcResult) => void
+  onOrderActive?: (active: boolean) => void
+  notifications?: CalcNotification[]
+  orderActive?: boolean
+}
+
+export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notifications, orderActive }: CalculatorProps) {
   const [inputs, setInputs] = useState<CalcInputs>(loadSaved)
 
   useEffect(() => {
@@ -184,14 +216,25 @@ export function Calculator({ entryPriceFromOrderBook }: CalculatorProps) {
     setInputs(prev => ({ ...prev, [key]: val }))
   }, [])
 
-  const useOrderBookPrice = useCallback(() => {
-    if (entryPriceFromOrderBook && entryPriceFromOrderBook > 0) {
-      update('entryPrice', entryPriceFromOrderBook)
-    }
-  }, [entryPriceFromOrderBook, update])
-
   const result = useMemo(() => compute(inputs), [inputs])
   const d = inputs.decimals
+
+  useEffect(() => {
+    if (onCalcResult) {
+      onCalcResult({
+        entryPrice: inputs.entryPrice,
+        position: inputs.position,
+        tpNoRecompra: result.tpNoRecompra,
+        lastSl: result.lastSl,
+        liqPrice: result.liqPrice,
+        numCoins: inputs.numCoins,
+        stopLossUsd: inputs.stopLossUsd,
+        takeProfitPct: inputs.takeProfitPct,
+        leverage: inputs.leverage,
+        rows: result.rows,
+      })
+    }
+  }, [inputs, result, onCalcResult])
 
   return (
     <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3" style={{ backgroundColor: '#141821' }}>
@@ -200,6 +243,23 @@ export function Calculator({ entryPriceFromOrderBook }: CalculatorProps) {
         <IconCalculator size={22} className="text-yellow-400" />
         <h2 className="text-base font-bold text-white">Calculadora de Trading</h2>
       </div>
+
+      {/* Notifications */}
+      {notifications && notifications.length > 0 && (
+        <div className="rounded-2xl p-3 space-y-1.5" style={{ backgroundColor: '#1e2536' }}>
+          <h3 className="text-xs font-bold text-white mb-1">Alertas de Órdenes</h3>
+          {notifications.slice(0, 5).map(n => {
+            const color = n.type === 'tp' ? '#22c55e' : n.type === 'sl' || n.type === 'liq' ? '#ef4444' : n.type === 'entry' ? '#818cf8' : '#a78bfa'
+            return (
+              <div key={n.id + n.time} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${color}15`, border: `1px solid ${color}30` }}>
+                <span style={{ color }}>{n.type === 'tp' ? '🟢' : n.type === 'sl' ? '🔴' : n.type === 'liq' ? '🟠' : '🟣'}</span>
+                <span className="flex-1 text-white">{n.msg}</span>
+                <span style={{ color: '#6b7280' }}>{n.time}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Position selector */}
       <div className="rounded-2xl p-3" style={{ backgroundColor: '#1e2536' }}>
@@ -261,19 +321,80 @@ export function Calculator({ entryPriceFromOrderBook }: CalculatorProps) {
           </div>
         </div>
 
-        {/* Use order book price button */}
-        {entryPriceFromOrderBook && entryPriceFromOrderBook > 0 && (
-          <button
-            onClick={useOrderBookPrice}
-            className="w-full mt-2 py-1.5 rounded-xl text-[10px] font-bold transition-colors"
-            style={{
-              backgroundColor: 'rgba(245,158,11,0.15)',
-              color: '#f59e0b',
-              border: '1px solid rgba(245,158,11,0.3)',
-            }}
-          >
-            Usar precio del Order Book (${fmt(entryPriceFromOrderBook, 2)})
-          </button>
+        {/* Order Book price buttons */}
+        {orderBookPrices && (
+          <div className="mt-2 space-y-2">
+            {inputs.position === 'LONG' ? (
+              <>
+                <p className="text-[9px] font-bold" style={{ color: '#22c55e' }}>Precios del Order Book (LONG)</p>
+                <div className="flex gap-1.5">
+                  {[
+                    { label: 'Entrada', price: orderBookPrices.entrada, color: '#fbbf24' },
+                    { label: 'B.Long', price: orderBookPrices.bloqueLong, color: '#4ade80' },
+                    { label: 'T.Long', price: orderBookPrices.bloqueTopeLong, color: '#22c55e' },
+                  ].map(btn => (
+                    <button
+                      key={btn.label}
+                      onClick={() => btn.price > 0 && update('entryPrice', btn.price)}
+                      className="flex-1 py-1.5 rounded-lg text-[9px] font-bold transition-colors"
+                      style={{
+                        backgroundColor: `${btn.color}15`,
+                        color: btn.color,
+                        border: `1px solid ${btn.color}30`,
+                        opacity: btn.price > 0 ? 1 : 0.4,
+                      }}
+                    >
+                      {btn.label}
+                      <br />
+                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : '—'}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[9px] font-bold" style={{ color: '#ef4444' }}>Precios del Order Book (SHORT)</p>
+                <div className="flex gap-1.5">
+                  {[
+                    { label: 'Entrada', price: orderBookPrices.entrada, color: '#fbbf24' },
+                    { label: 'B.Short', price: orderBookPrices.bloqueShort, color: '#f87171' },
+                    { label: 'T.Short', price: orderBookPrices.bloqueTopeShort, color: '#ef4444' },
+                  ].map(btn => (
+                    <button
+                      key={btn.label}
+                      onClick={() => btn.price > 0 && update('entryPrice', btn.price)}
+                      className="flex-1 py-1.5 rounded-lg text-[9px] font-bold transition-colors"
+                      style={{
+                        backgroundColor: `${btn.color}15`,
+                        color: btn.color,
+                        border: `1px solid ${btn.color}30`,
+                        opacity: btn.price > 0 ? 1 : 0.4,
+                      }}
+                    >
+                      {btn.label}
+                      <br />
+                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : '—'}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Execute order button */}
+            <button
+              onClick={() => onOrderActive?.(!orderActive)}
+              className="w-full py-2 rounded-xl text-xs font-bold transition-colors"
+              style={{
+                backgroundColor: orderActive
+                  ? 'rgba(239,68,68,0.2)'
+                  : inputs.position === 'LONG' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                color: orderActive ? '#ef4444' : inputs.position === 'LONG' ? '#22c55e' : '#ef4444',
+                border: `1px solid ${orderActive ? 'rgba(239,68,68,0.4)' : inputs.position === 'LONG' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
+              }}
+            >
+              {orderActive ? '✕ Cerrar Orden' : `▶ Ejecutar Orden ${inputs.position}`}
+            </button>
+          </div>
         )}
       </div>
 
@@ -335,24 +456,38 @@ export function Calculator({ entryPriceFromOrderBook }: CalculatorProps) {
       </div>
 
       <div className="text-center text-[9px] py-2" style={{ color: '#4b5563' }}>
-        Calculadora V1.1.3 — Realizado por Kevin Prado
+        Calculadora
       </div>
     </div>
   )
 }
 
 function InputField({ label, value, onChange, suffix }: { label: string; value: number; onChange: (v: number) => void; suffix?: string }) {
+  const [text, setText] = useState(String(value))
+  const [focused, setFocused] = useState(false)
+  const displayText = focused ? text : String(value)
+
   return (
     <div>
       <label className="text-[10px] font-medium mb-1 block" style={{ color: '#9ca3af' }}>{label}</label>
       <div className="relative">
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
-          value={value}
+          value={displayText}
+          onFocus={e => {
+            setFocused(true)
+            setText(String(value))
+            setTimeout(() => e.target.select(), 0)
+          }}
           onChange={e => {
-            const v = parseFloat(e.target.value)
+            const raw = e.target.value
+            setText(raw)
+            const v = parseFloat(raw)
             if (!isNaN(v)) onChange(v)
+          }}
+          onBlur={() => {
+            setFocused(false)
           }}
           className="w-full px-2 py-1.5 rounded-lg text-xs text-white outline-none"
           style={{ backgroundColor: '#1a1f2e', border: '1px solid rgba(75,85,99,0.3)' }}
