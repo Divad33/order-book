@@ -9,11 +9,14 @@ import { ChartScreen } from './components/ChartScreen'
 import type { OverlayLine } from './components/CandlestickChart'
 import { BottomNav } from './components/BottomNav'
 import type { TabId } from './components/BottomNav'
-import { IconRefresh, IconShare, IconBell } from './components/Icons'
+import { IconRefresh, IconShare, IconBell, IconSun, IconMoon, IconStar, IconStarFilled, IconSignal } from './components/Icons'
+import { useTheme } from './ThemeContext'
 
 const AUTO_REFRESH_INTERVAL = 30_000
 
 function App() {
+  const { colors, toggle: toggleTheme, isDark } = useTheme()
+
   const {
     shortPrices,
     longPrices,
@@ -45,6 +48,22 @@ function App() {
   const [alertPrice, setAlertPrice] = useState<number | null>(null)
   const [alertDirection, setAlertDirection] = useState<'above' | 'below'>('above')
   const [alertDraft, setAlertDraft] = useState('')
+  const [alertSound, setAlertSound] = useState(() => {
+    return localStorage.getItem('ob_alertSound') !== 'false'
+  })
+
+  // Favorites state
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('ob_favorites')
+      return saved ? JSON.parse(saved) : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
+    } catch {
+      return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
+    }
+  })
+
+  // Dominance state
+  const [dominance, setDominance] = useState<{ buyPct: number; sellPct: number } | null>(null)
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -53,6 +72,46 @@ function App() {
   useEffect(() => {
     localStorage.setItem('ob_dataSource', dataSource)
   }, [dataSource])
+
+  // Save alert sound preference
+  useEffect(() => {
+    localStorage.setItem('ob_alertSound', alertSound ? 'true' : 'false')
+  }, [alertSound])
+
+  // Save favorites
+  useEffect(() => {
+    localStorage.setItem('ob_favorites', JSON.stringify(favorites))
+  }, [favorites])
+
+  const toggleFavorite = useCallback((sym: string) => {
+    setFavorites(prev => {
+      if (prev.includes(sym)) {
+        return prev.filter(s => s !== sym)
+      }
+      return [...prev, sym]
+    })
+  }, [])
+
+  const playAlertSound = useCallback(() => {
+    if (!alertSound) return
+    try {
+      const audioCtx = new AudioContext()
+      const oscillator = audioCtx.createOscillator()
+      const gainNode = audioCtx.createGain()
+      oscillator.connect(gainNode)
+      gainNode.connect(audioCtx.destination)
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime)
+      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime)
+      oscillator.start()
+      oscillator.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.1)
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5)
+      oscillator.stop(audioCtx.currentTime + 0.5)
+    } catch {
+      // Audio not available
+    }
+  }, [alertSound])
 
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
@@ -66,6 +125,17 @@ function App() {
           second: '2-digit',
         }),
       )
+
+      // Calculate dominance from volumes
+      const totalBuyVol = result.longPrices.reduce((a, b) => a + b.volume, 0)
+      const totalSellVol = result.shortPrices.reduce((a, b) => a + b.volume, 0)
+      const total = totalBuyVol + totalSellVol
+      if (total > 0) {
+        setDominance({
+          buyPct: Math.round((totalBuyVol / total) * 100),
+          sellPct: Math.round((totalSellVol / total) * 100),
+        })
+      }
 
       const shortAvg =
         result.shortPrices.reduce((a, b) => a + b.price, 0) /
@@ -100,6 +170,7 @@ function App() {
             : result.currentPrice <= alertPrice
         if (triggered) {
           if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
+          playAlertSound()
           alert(
             `${symbol.replace('USDT', '')} llegó a $${result.currentPrice.toLocaleString()} (alerta: ${alertDirection === 'above' ? '≥' : '≤'} $${alertPrice.toLocaleString()})`,
           )
@@ -107,7 +178,7 @@ function App() {
         }
       }
     }
-  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection])
+  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection, playAlertSound])
 
   const fetchRef = useRef(handleFetch)
   useEffect(() => {
@@ -165,6 +236,38 @@ function App() {
 
   const sourceLabel = dataSource === 'futures' ? 'Futures' : 'Spot'
 
+  // Buy/sell signal based on current price vs order book levels
+  const signal = useMemo<{ type: 'buy' | 'sell' | 'neutral'; label: string; color: string }>(() => {
+    if (currentPrice === null || computed.entryPoint2 === 0) {
+      return { type: 'neutral', label: 'SIN DATOS', color: isDark ? '#6b7280' : '#9ca3af' }
+    }
+    const entry = computed.entryPoint2
+    const bLong = computed.bloqueDeLong
+    const tLong = computed.bloqueTopeLong
+    const bShort = computed.bloqueDeShort
+    const tShort = computed.bloqueTopeShort
+
+    if (currentPrice <= tLong) {
+      return { type: 'buy', label: 'ZONA DE COMPRA', color: '#22c55e' }
+    }
+    if (currentPrice <= bLong) {
+      return { type: 'buy', label: 'SEÑAL DE COMPRA', color: '#4ade80' }
+    }
+    if (currentPrice >= tShort) {
+      return { type: 'sell', label: 'ZONA DE VENTA', color: '#ef4444' }
+    }
+    if (currentPrice >= bShort) {
+      return { type: 'sell', label: 'SEÑAL DE VENTA', color: '#f87171' }
+    }
+    if (currentPrice < entry) {
+      return { type: 'buy', label: 'TENDENCIA COMPRA', color: '#86efac' }
+    }
+    if (currentPrice > entry) {
+      return { type: 'sell', label: 'TENDENCIA VENTA', color: '#fca5a5' }
+    }
+    return { type: 'neutral', label: 'NEUTRAL', color: isDark ? '#9ca3af' : '#6b7280' }
+  }, [currentPrice, computed, isDark])
+
   // Build overlay lines for the chart (5 order book levels)
   const chartOverlayLines = useMemo<OverlayLine[]>(() => {
     const lines: OverlayLine[] = []
@@ -189,9 +292,37 @@ function App() {
   // ─── Tab: Order Book ─────────────────────────────
   const renderOrderBook = () => (
     <div className="flex-1 overflow-y-auto">
+      {/* Favorites Quick Switch */}
+      {favorites.length > 0 && (
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {favorites.map((fav) => {
+              const favBase = fav.replace('USDT', '')
+              const isActive = fav === symbol
+              return (
+                <button
+                  key={fav}
+                  onClick={() => setSymbol(fav)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors shrink-0"
+                  style={{
+                    backgroundColor: isActive
+                      ? (isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.15)')
+                      : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                    color: isActive ? '#fbbf24' : colors.textSecondary,
+                    border: isActive ? '1px solid rgba(251,191,36,0.3)' : '1px solid transparent',
+                  }}
+                >
+                  {favBase}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Symbol + Price Card */}
-      <div className="px-4 pt-4 pb-2">
-        <div className="bg-[#1e2536] rounded-2xl p-4">
+      <div className="px-4 pt-2 pb-2">
+        <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <button
@@ -199,15 +330,26 @@ function App() {
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                   autoRefresh
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+                    : 'text-gray-400 border'
                 }`}
+                style={!autoRefresh ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(75,85,99,0.3)' : 'rgba(209,213,219,0.5)' } : undefined}
               >
                 <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
                 {autoRefresh ? `${countdown}s` : 'Auto'}
               </button>
-              <span className="text-[10px] text-gray-500 bg-gray-700/30 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textMuted }}>
                 {sourceLabel}
               </span>
+              <button
+                onClick={() => toggleFavorite(symbol)}
+                className="p-1"
+              >
+                {favorites.includes(symbol) ? (
+                  <IconStarFilled size={16} className="text-yellow-400" />
+                ) : (
+                  <IconStar size={16} style={{ color: colors.textMuted }} />
+                )}
+              </button>
             </div>
             <SymbolSelector symbol={symbol} onSymbolChange={setSymbol} />
           </div>
@@ -215,15 +357,15 @@ function App() {
           {/* Current Price */}
           {currentPrice !== null ? (
             <div className="mb-1">
-              <span className="text-3xl font-bold text-white tabular-nums tracking-tight">
+              <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: colors.text }}>
                 ${currentPrice.toLocaleString()}
               </span>
               {lastUpdate && (
-                <span className="text-xs text-gray-500 ml-2">{lastUpdate}</span>
+                <span className="text-xs ml-2" style={{ color: colors.textMuted }}>{lastUpdate}</span>
               )}
             </div>
           ) : (
-            <div className="text-gray-500 text-sm mb-1">Ve a Ajustes para obtener datos</div>
+            <div className="text-sm mb-1" style={{ color: colors.textMuted }}>Ve a Ajustes para obtener datos</div>
           )}
           {error && (
             <div className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-1.5 mt-2">
@@ -232,6 +374,47 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Buy/Sell Signal */}
+      {currentPrice !== null && (
+        <div className="px-4 pb-2">
+          <div className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: `${signal.color}15`, border: `1px solid ${signal.color}30` }}>
+            <IconSignal size={20} style={{ color: signal.color }} />
+            <div className="flex-1">
+              <div className="text-xs font-bold tracking-wider" style={{ color: signal.color }}>
+                {signal.label}
+              </div>
+              <div className="text-[10px] mt-0.5" style={{ color: colors.textMuted }}>
+                {signal.type === 'buy' ? 'Precio cerca de zona de compra' : signal.type === 'sell' ? 'Precio cerca de zona de venta' : 'Esperando datos'}
+              </div>
+            </div>
+            {dominance && (
+              <div className="text-right">
+                <div className="text-[10px]" style={{ color: colors.textMuted }}>Dominancia</div>
+                <div className="flex items-center gap-1 text-[10px] font-bold">
+                  <span className="text-green-400">{dominance.buyPct}%</span>
+                  <span style={{ color: colors.textMuted }}>|</span>
+                  <span className="text-red-400">{dominance.sellPct}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Dominance Bar */}
+      {dominance && (
+        <div className="px-4 pb-2">
+          <div className="rounded-xl overflow-hidden h-1.5 flex" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+            <div className="bg-green-500 transition-all duration-500" style={{ width: `${dominance.buyPct}%` }} />
+            <div className="bg-red-500 transition-all duration-500" style={{ width: `${dominance.sellPct}%` }} />
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-[9px] text-green-400 font-medium">Compradores {dominance.buyPct}%</span>
+            <span className="text-[9px] text-red-400 font-medium">Vendedores {dominance.sellPct}%</span>
+          </div>
+        </div>
+      )}
 
       {/* Entry Point Card */}
       <div className="px-4 pb-2">
@@ -247,25 +430,25 @@ function App() {
 
       {/* Blocks Grid */}
       <div className="grid grid-cols-2 gap-2 px-4 pb-2">
-        <div className="bg-[#1e2536] rounded-xl p-3">
+        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
           <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
             Bloque Tope Short
           </div>
           <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueTopeShort)}</div>
         </div>
-        <div className="bg-[#1e2536] rounded-xl p-3">
+        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
           <div className="text-[10px] font-medium text-red-400/60 uppercase tracking-wider mb-1">
             Bloque de Short
           </div>
           <div className="text-sm font-bold text-red-400 tabular-nums">{fmt(computed.bloqueDeShort)}</div>
         </div>
-        <div className="bg-[#1e2536] rounded-xl p-3">
+        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
           <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
             Bloque de Long
           </div>
           <div className="text-sm font-bold text-green-400 tabular-nums">{fmt(computed.bloqueDeLong)}</div>
         </div>
-        <div className="bg-[#1e2536] rounded-xl p-3">
+        <div className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
           <div className="text-[10px] font-medium text-green-400/60 uppercase tracking-wider mb-1">
             Bloque Tope Long
           </div>
@@ -281,7 +464,7 @@ function App() {
             <div className="bg-red-500/20 border border-red-500/20 text-red-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Short
             </div>
-            <div className="bg-[#1e2536] rounded-b-xl p-2 space-y-1">
+            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: colors.card }}>
               {shortPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -309,7 +492,7 @@ function App() {
             <div className="bg-green-500/20 border border-green-500/20 text-green-400 text-center font-bold text-xs py-2 rounded-t-xl uppercase tracking-wider">
               Long
             </div>
-            <div className="bg-[#1e2536] rounded-b-xl p-2 space-y-1">
+            <div className="rounded-b-xl p-2 space-y-1" style={{ backgroundColor: colors.card }}>
               {longPrices.map((pl, i) => (
                 <div key={i} className="group">
                   <PriceInput
@@ -336,13 +519,13 @@ function App() {
 
       {/* Averages footer */}
       <div className="px-4 pb-4">
-        <div className="bg-[#1e2536] rounded-xl px-4 py-2.5 flex justify-between text-xs">
+        <div className="rounded-xl px-4 py-2.5 flex justify-between text-xs" style={{ backgroundColor: colors.card }}>
           <div>
-            <span className="text-gray-500">Prom. Short: </span>
+            <span style={{ color: colors.textMuted }}>Prom. Short: </span>
             <span className="font-bold text-red-400 tabular-nums">{fmt(computed.avgShort)}</span>
           </div>
           <div>
-            <span className="text-gray-500">Prom. Long: </span>
+            <span style={{ color: colors.textMuted }}>Prom. Long: </span>
             <span className="font-bold text-green-400 tabular-nums">{fmt(computed.avgLong)}</span>
           </div>
         </div>
@@ -362,9 +545,9 @@ function App() {
     const reversed = [...history].reverse()
     return (
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
-        <h2 className="text-lg font-bold text-white mb-3">Historial</h2>
+        <h2 className="text-lg font-bold mb-3" style={{ color: colors.text }}>Historial</h2>
         {reversed.length === 0 ? (
-          <div className="text-gray-500 text-center py-12 text-sm">
+          <div className="text-center py-12 text-sm" style={{ color: colors.textMuted }}>
             Aún no hay historial. Obtén datos para empezar.
           </div>
         ) : (
@@ -374,32 +557,32 @@ function App() {
               const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               const date = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
               return (
-                <div key={i} className="bg-[#1e2536] rounded-xl p-3">
+                <div key={i} className="rounded-xl p-3" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs bg-yellow-500/20 text-yellow-400 font-bold px-2 py-0.5 rounded-full">
                       {e.symbol.replace('USDT', '')}
                     </span>
-                    <span className="text-xs text-gray-500">{date} {time}</span>
+                    <span className="text-xs" style={{ color: colors.textMuted }}>{date} {time}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-gray-500">Precio: </span>
-                      <span className="text-white font-bold">{e.currentPrice.toLocaleString()}</span>
+                      <span style={{ color: colors.textMuted }}>Precio: </span>
+                      <span className="font-bold" style={{ color: colors.text }}>{e.currentPrice.toLocaleString()}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Entrada: </span>
+                      <span style={{ color: colors.textMuted }}>Entrada: </span>
                       <span className="text-yellow-400 font-bold">
                         {e.entryPoint.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Short: </span>
+                      <span style={{ color: colors.textMuted }}>Short: </span>
                       <span className="text-red-400 font-bold">
                         {e.avgShort.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Long: </span>
+                      <span style={{ color: colors.textMuted }}>Long: </span>
                       <span className="text-green-400 font-bold">
                         {e.avgLong.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
@@ -417,26 +600,48 @@ function App() {
   // ─── Tab: Settings (Alerts + Config) ─────────────
   const renderSettings = () => (
     <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-4">
-      <h2 className="text-lg font-bold text-white">Ajustes</h2>
+      <h2 className="text-lg font-bold" style={{ color: colors.text }}>Ajustes</h2>
+
+      {/* Theme toggle */}
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="flex items-center gap-2 mb-3">
+          {isDark ? <IconMoon size={18} className="text-yellow-400" /> : <IconSun size={18} className="text-yellow-500" />}
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Apariencia</h3>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs" style={{ color: colors.textSecondary }}>{isDark ? 'Modo Oscuro' : 'Modo Claro'}</span>
+          <button
+            onClick={toggleTheme}
+            className="relative w-11 h-6 rounded-full transition-colors"
+            style={{ backgroundColor: isDark ? '#fbbf24' : '#6b7280' }}
+          >
+            <div
+              className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+              style={{ transform: isDark ? 'translateX(22px)' : 'translateX(2px)' }}
+            />
+          </button>
+        </div>
+      </div>
 
       {/* Fetch Data section */}
-      <div className="bg-[#1e2536] rounded-2xl p-4">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
         <div className="flex items-center gap-2 mb-3">
           <IconRefresh size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold text-white">Obtener Datos</h3>
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Obtener Datos</h3>
         </div>
 
         {/* Data source selector */}
         <div className="mb-3">
-          <div className="text-xs text-gray-400 mb-2">Fuente de datos:</div>
+          <div className="text-xs mb-2" style={{ color: colors.textSecondary }}>Fuente de datos:</div>
           <div className="flex gap-2">
             <button
               onClick={() => setDataSource('spot')}
               className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${
                 dataSource === 'spot'
                   ? 'bg-yellow-500 text-black'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+                  : ''
               }`}
+              style={dataSource !== 'spot' ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` } : undefined}
             >
               Spot
             </button>
@@ -445,8 +650,9 @@ function App() {
               className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${
                 dataSource === 'futures'
                   ? 'bg-yellow-500 text-black'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600/30'
+                  : ''
               }`}
+              style={dataSource !== 'futures' ? { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` } : undefined}
             >
               Futures
             </button>
@@ -466,17 +672,17 @@ function App() {
           </div>
         )}
         {dataSource === 'futures' && (
-          <div className="text-[10px] text-gray-500 mt-2">
+          <div className="text-[10px] mt-2" style={{ color: colors.textMuted }}>
             Futures puede dar error 451 si está bloqueado en tu región.
           </div>
         )}
       </div>
 
       {/* Alert section */}
-      <div className="bg-[#1e2536] rounded-2xl p-4">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
         <div className="flex items-center gap-2 mb-3">
           <IconBell size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold text-white">Alerta de Precio</h3>
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Alerta de Precio</h3>
         </div>
 
         {alertPrice !== null && (
@@ -493,13 +699,29 @@ function App() {
           </div>
         )}
 
+        {/* Sound toggle */}
+        <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}` }}>
+          <span className="text-xs" style={{ color: colors.textSecondary }}>Sonido de alerta</span>
+          <button
+            onClick={() => setAlertSound(!alertSound)}
+            className="relative w-11 h-6 rounded-full transition-colors"
+            style={{ backgroundColor: alertSound ? '#22c55e' : (isDark ? '#374151' : '#d1d5db') }}
+          >
+            <div
+              className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+              style={{ transform: alertSound ? 'translateX(22px)' : 'translateX(2px)' }}
+            />
+          </button>
+        </div>
+
         <div className="space-y-2">
-          <div className="text-xs text-gray-400">Notificar cuando {base} llegue a:</div>
+          <div className="text-xs" style={{ color: colors.textSecondary }}>Notificar cuando {base} llegue a:</div>
           <div className="flex gap-2">
             <select
               value={alertDirection}
               onChange={(e) => setAlertDirection(e.target.value as 'above' | 'below')}
-              className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 border border-gray-700 outline-none"
+              className="text-xs rounded-lg px-3 py-2 outline-none"
+              style={{ backgroundColor: colors.inputBg, color: colors.text, border: `1px solid ${colors.inputBorder}` }}
             >
               <option value="above">≥ Sube a</option>
               <option value="below">≤ Baja a</option>
@@ -509,7 +731,8 @@ function App() {
               value={alertDraft}
               onChange={(e) => setAlertDraft(e.target.value)}
               placeholder="Precio"
-              className="flex-1 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 border border-gray-700 outline-none"
+              className="flex-1 text-xs rounded-lg px-3 py-2 outline-none"
+              style={{ backgroundColor: colors.inputBg, color: colors.text, border: `1px solid ${colors.inputBorder}` }}
             />
           </div>
           <button
@@ -525,23 +748,21 @@ function App() {
       </div>
 
       {/* Auto-refresh section */}
-      <div className="bg-[#1e2536] rounded-2xl p-4">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
         <div className="flex items-center gap-2 mb-3">
           <IconRefresh size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold text-white">Auto-Refresh</h3>
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Auto-Refresh</h3>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-400">Actualizar cada 30 segundos</span>
+          <span className="text-xs" style={{ color: colors.textSecondary }}>Actualizar cada 30 segundos</span>
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${
-              autoRefresh ? 'bg-green-500' : 'bg-gray-600'
-            }`}
+            className="relative w-11 h-6 rounded-full transition-colors"
+            style={{ backgroundColor: autoRefresh ? '#22c55e' : (isDark ? '#374151' : '#d1d5db') }}
           >
             <div
-              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                autoRefresh ? 'translate-x-5.5' : 'translate-x-0.5'
-              }`}
+              className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+              style={{ transform: autoRefresh ? 'translateX(22px)' : 'translateX(2px)' }}
             />
           </button>
         </div>
@@ -552,29 +773,58 @@ function App() {
         )}
       </div>
 
+      {/* Favorites management */}
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
+        <div className="flex items-center gap-2 mb-3">
+          <IconStarFilled size={18} className="text-yellow-400" />
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Pares Favoritos</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {favorites.map((fav) => (
+            <div
+              key={fav}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium"
+              style={{ backgroundColor: isDark ? 'rgba(251,191,36,0.1)' : 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}
+            >
+              <span className="text-yellow-400">{fav.replace('USDT', '')}</span>
+              <button
+                onClick={() => toggleFavorite(fav)}
+                className="text-yellow-400/60 hover:text-red-400 ml-1"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] mt-2" style={{ color: colors.textMuted }}>
+          Toca la estrella ★ en la pantalla principal para agregar/quitar favoritos.
+        </div>
+      </div>
+
       {/* Export section */}
-      <div className="bg-[#1e2536] rounded-2xl p-4">
+      <div className="rounded-2xl p-4" style={{ backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isDark ? 0 : 1 }}>
         <div className="flex items-center gap-2 mb-3">
           <IconShare size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-bold text-white">Exportar Datos</h3>
+          <h3 className="text-sm font-bold" style={{ color: colors.text }}>Exportar Datos</h3>
         </div>
         <button
           onClick={handleExport}
-          className="w-full bg-gray-700/50 text-gray-300 text-sm font-medium py-2.5 rounded-xl border border-gray-600/30 active:bg-gray-600/50 transition-colors"
+          className="w-full text-sm font-medium py-2.5 rounded-xl transition-colors active:opacity-80"
+          style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', color: colors.textSecondary, border: `1px solid ${colors.inputBorder}` }}
         >
           Compartir Order Book
         </button>
       </div>
 
       {/* Info */}
-      <div className="text-center text-[10px] text-gray-600 py-2">
-        Order Book v2.1 — Binance {sourceLabel}
+      <div className="text-center text-[10px] py-2" style={{ color: colors.textMuted }}>
+        Order Book v3.0 — Binance {sourceLabel}
       </div>
     </div>
   )
 
   return (
-    <div className="h-screen bg-[#141821] text-white flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: colors.bg, color: colors.text }}>
       {/* Content */}
       {activeTab === 'orderbook' && renderOrderBook()}
       {activeTab === 'chart' && renderChart()}

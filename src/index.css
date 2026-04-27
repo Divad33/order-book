@@ -16,6 +16,15 @@ html, body, #root {
   }
 }
 
+/* Hide scrollbar for favorites */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Smooth scrolling */
 * {
   -webkit-tap-highlight-color: transparent;
