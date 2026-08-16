@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } fro
 import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
+import { useLivePrice } from './hooks/useLivePrice'
 import type { DataSource } from './hooks/useOrderBookFetch'
 import { PriceInput } from './components/PriceInput'
 import { SymbolSelector } from './components/SymbolSelector'
@@ -53,6 +54,7 @@ function App() {
     return (localStorage.getItem('ob_dataSource') as DataSource) || 'spot'
   })
   const { fetchOrderBook, loading, error } = useOrderBookFetch(symbol, dataSource)
+  const { ticker, isConnected: priceConnected } = useLivePrice(symbol)
 
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -63,6 +65,14 @@ function App() {
   const [countdown, setCountdown] = useState(0)
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+
+  // Sync currentPrice from live WebSocket ticker
+  useEffect(() => {
+    if (ticker) {
+      setCurrentPrice(ticker.price)
+      setLastUpdate(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    }
+  }, [ticker])
   const [activeTab, setActiveTab] = useState<TabId>('orderbook')
 
   // Alert state
@@ -496,7 +506,7 @@ function App() {
                 style={!autoRefresh ? { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(75,85,99,0.3)' } : undefined}
               >
                 <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
-                {autoRefresh ? `${countdown}s` : 'Auto'}
+                {autoRefresh ? `Libro ${countdown}s` : 'Auto Libro'}
               </button>
               <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#6b7280' }}>
                 {sourceLabel}
@@ -517,12 +527,18 @@ function App() {
 
           {/* Current Price */}
           {currentPrice !== null ? (
-            <div className="mb-1">
+            <div className="mb-1 flex items-center gap-2 flex-wrap">
               <span className="text-3xl font-bold tabular-nums tracking-tight text-white">
                 ${currentPrice.toLocaleString()}
               </span>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: priceConnected ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}>
+                <span className={`w-1.5 h-1.5 rounded-full ${priceConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className={`text-[9px] font-bold ${priceConnected ? 'text-green-400' : 'text-red-400'}`}>
+                  {priceConnected ? 'LIVE' : 'OFF'}
+                </span>
+              </div>
               {lastUpdate && (
-                <span className="text-xs ml-2" style={{ color: '#6b7280' }}>{lastUpdate}</span>
+                <span className="text-xs" style={{ color: '#6b7280' }}>{lastUpdate}</span>
               )}
             </div>
           ) : (
@@ -1102,7 +1118,7 @@ function App() {
         </div>
         {autoRefresh && (
           <div className="text-xs text-green-400 mt-2">
-            Próxima actualización en {countdown}s
+            Próxima actualización del libro en {countdown}s
           </div>
         )}
       </div>
