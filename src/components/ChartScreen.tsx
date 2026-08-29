@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { CandlestickChart } from './CandlestickChart'
 import type { Kline, OverlayLine, ActiveOrder } from './CandlestickChart'
 import { IconRefresh } from './Icons'
-import type { DataSource } from './useOrderBookFetch'
+import type { DataSource } from '../hooks/useOrderBookFetch'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 type Interval = (typeof INTERVALS)[number]
