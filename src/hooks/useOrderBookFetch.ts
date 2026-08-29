@@ -4,17 +4,17 @@ export type DataSource = 'spot' | 'futures'
 
 export interface PriceLevel {
   price: number
-  volume: number      // normalizado 0-1 (relativo al max del top 16)
-  rawVolume: number   // volumen real en moneda base (qty)
-  usdtVolume: number  // volumen aproximado en USDT (qty * price)
+  volume: number
+  rawVolume: number
+  usdtVolume: number
 }
 
 export interface FetchResult {
   shortPrices: PriceLevel[]
   longPrices: PriceLevel[]
   currentPrice: number
-  totalShortVol: number   // total USDT en asks
-  totalLongVol: number    // total USDT en bids
+  totalShortVol: number
+  totalLongVol: number
 }
 
 interface AggregatedLevel {
@@ -66,7 +66,6 @@ function aggregateByStep(
 
   const top = sorted.slice(0, COUNT)
   const maxVol = Math.max(...top.map((l) => l.qty), 1)
-  const totalUsdt = top.reduce((sum, l) => sum + l.usdt, 0)
 
   return top
     .sort((a, b) => b.price - a.price)
@@ -75,8 +74,7 @@ function aggregateByStep(
       volume: maxVol > 0 ? l.qty / maxVol : 0,
       rawVolume: l.qty,
       usdtVolume: l.usdt,
-    })),
-    // totalUsdt no se usa aquí directamente, se calcula fuera
+    }))
 }
 
 export function useOrderBookFetch(symbol: string, source: DataSource) {
@@ -89,7 +87,7 @@ export function useOrderBookFetch(symbol: string, source: DataSource) {
 
     const depthUrl = source === 'futures'
       ? `${FUTURES_DEPTH}?symbol=${symbol}&limit=1000`
-      : `${SPOT_DEPTH}?symbol=${symbol}&limit=1000`  // FIX: 5000 no soportado sin auth, usar 1000
+      : `${SPOT_DEPTH}?symbol=${symbol}&limit=1000`
     const tickerUrl = source === 'futures'
       ? `${FUTURES_TICKER}?symbol=${symbol}`
       : `${SPOT_TICKER}?symbol=${symbol}`
