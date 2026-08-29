@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
-import { useOrderBook, loadHistory, saveHistory, generateDefaults } from './hooks/useOrderBook'
+import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { useLivePrice } from './hooks/useLivePrice'
@@ -151,7 +151,7 @@ function App() {
   // Calc order notifications and execution state
   const [calcNotifications, setCalcNotifications] = useState<CalcNotification[]>([])
   const [orderActive, setOrderActive] = useState(false)
-  const [orderStartPrice, setOrderStartPrice] = useState<number | null>(null)
+  const [, setOrderStartPrice] = useState<number | null>(null)
   const orderOpenTimeRef = useRef<string>('')
 
   // Order history
