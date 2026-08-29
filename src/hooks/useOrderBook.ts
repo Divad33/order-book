@@ -233,4 +233,5 @@ export function useOrderBook() {
     removeShortPrice,
     removeLongPrice,
     loadPrices,
-  
+  }
+}
