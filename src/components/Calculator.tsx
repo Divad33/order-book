@@ -1,3 +1,4 @@
+
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { IconCalculator } from './Icons'
 
@@ -16,7 +17,7 @@ export interface CalcInputs {
   orderType: OrderType
   capital: number
   decimals: number
-  mmRate: number  // Maintenance Margin Rate (ej. 0.005 = 0.5%)
+  mmRate: number
 }
 
 export interface RecompraRow {
@@ -63,20 +64,16 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
   const { position, rebuyPct, coinPct, stopLossUsd, entryPrice, numCoins, takeProfitPct, leverage, capital, mmRate } = inp
   const isShort = position === 'SHORT'
 
-  // Initial TP (no recompras) based on entry price
   const tpNoRecompra = isShort
     ? entryPrice * (1 - takeProfitPct / 100)
     : entryPrice * (1 + takeProfitPct / 100)
   const tpNoRecompraUsd = entryPrice * numCoins * (takeProfitPct / 100)
 
-  // Initial commission
   const comRate = inp.orderType === 'MARKET' ? 0.0004 : 0.0002
   const initCom = entryPrice * numCoins * comRate
   const comTpLimit = tpNoRecompra * numCoins * 0.0002
   const comTpMarket = tpNoRecompra * numCoins * 0.0004
 
-  // FIX: FÃ³rmula de liquidaciÃ³n de Binance Futures (Isolated Margin, simplificada)
-  // Liq = Entry * (1 Â± IMRate âˆ“ MMRate)
   const calcLiq = (ep: number, tc: number) => {
     const notional = ep * tc
     const maintMargin = notional * mmRate
@@ -89,52 +86,40 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
 
   const initLiq = calcLiq(entryPrice, numCoins)
 
-  // Build recompra chain (up to 9)
   const rows: RecompraRow[] = []
   let prevRecompraPrice = entryPrice
   let prevAvgEntry = entryPrice
   let prevTotalCoins = numCoins
   let prevExtraCoins = numCoins
   for (let i = 1; i <= 9; i++) {
-    // Recompra price: entry shifted by rebuyPct
     const recompraPrice = i === 1
       ? (isShort ? entryPrice * (1 + rebuyPct / 100) : entryPrice * (1 - rebuyPct / 100))
       : (isShort ? prevRecompraPrice * (1 + rebuyPct / 100) : prevRecompraPrice * (1 - rebuyPct / 100))
 
-    // Extra coins for this level
     const extraCoins = i === 1
       ? numCoins * (1 + coinPct / 100)
       : prevExtraCoins * (1 + coinPct / 100)
 
-    // Total coins accumulated
     const totalCoins = prevTotalCoins + extraCoins
-
-    // Average entry price (PPE)
     const avgEntry = (prevAvgEntry * prevTotalCoins + extraCoins * recompraPrice) / totalCoins
 
-    // SL price for this recompra
     const sl = isShort
       ? stopLossUsd / totalCoins + avgEntry
       : avgEntry - stopLossUsd / totalCoins
 
-    // FIX: TP price basado en el avgEntry anterior (no en entryPrice para recompras)
     const tpBase = i === 1 ? entryPrice : prevAvgEntry
     const tpPrice = isShort
       ? tpBase * (1 - takeProfitPct / 100)
       : tpBase * (1 + takeProfitPct / 100)
-    // FIX: tpUsd usa prevTotalCoins correctamente (sin condiciÃ³n ternaria redundante)
     const tpUsd = prevTotalCoins * tpBase * (takeProfitPct / 100)
 
-    // USDT used
     const usdtUsed = totalCoins * avgEntry / leverage
     const usdtLev = usdtUsed * leverage
 
-    // Commissions for this recompra
     const comEntry = recompraPrice * extraCoins * 0.0002
     const comTpLimitRow = tpPrice * totalCoins * 0.0002
     const comTpMarketRow = tpPrice * totalCoins * 0.0004
 
-    // FIX: LiquidaciÃ³n con fÃ³rmula de Binance
     const liqPrice = calcLiq(avgEntry, totalCoins)
 
     rows.push({
@@ -160,7 +145,6 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
     prevExtraCoins = extraCoins
   }
 
-  // Last SL (from the highest active recompra)
   const lastSl = rows.length > 0 ? rows[rows.length - 1].slPartial : (isShort ? stopLossUsd / numCoins + entryPrice : entryPrice - stopLossUsd / numCoins)
   const lastSlPct = isShort
     ? (lastSl / entryPrice) - 1
@@ -175,7 +159,7 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
 }
 
 function fmt(n: number, dec: number): string {
-  if (!isFinite(n) || isNaN(n)) return 'â€”'
+  if (!isFinite(n) || isNaN(n)) return '—'
   return n.toFixed(dec)
 }
 
@@ -257,12 +241,12 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
       {/* Notifications */}
       {notifications && notifications.length > 0 && (
         <div className="rounded-2xl p-3 space-y-1.5" style={{ backgroundColor: '#1e2536' }}>
-          <h3 className="text-xs font-bold text-white mb-1">Alertas de Ã“rdenes</h3>
+          <h3 className="text-xs font-bold text-white mb-1">Alertas de Ordenes</h3>
           {notifications.slice(0, 5).map(n => {
             const color = n.type === 'tp' ? '#22c55e' : n.type === 'sl' || n.type === 'liq' ? '#ef4444' : n.type === 'entry' ? '#818cf8' : '#a78bfa'
             return (
               <div key={n.id + n.time} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ backgroundColor: `${color}15`, border: `1px solid ${color}30` }}>
-                <span style={{ color }}>{n.type === 'tp' ? 'ðŸŸ¢' : n.type === 'sl' ? 'ðŸ”´' : n.type === 'liq' ? 'ðŸŸ ' : 'ðŸŸ£'}</span>
+                <span style={{ color }}>{n.type === 'tp' ? 'TP' : n.type === 'sl' ? 'SL' : n.type === 'liq' ? 'LIQ' : 'ENT'}</span>
                 <span className="flex-1 text-white">{n.msg}</span>
                 <span style={{ color: '#6b7280' }}>{n.time}</span>
               </div>
@@ -273,7 +257,7 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
 
       {/* Position selector */}
       <div className="rounded-2xl p-3" style={{ backgroundColor: '#1e2536' }}>
-        <label className="text-[10px] font-medium mb-2 block" style={{ color: '#9ca3af' }}>PosiciÃ³n</label>
+        <label className="text-[10px] font-medium mb-2 block" style={{ color: '#9ca3af' }}>Posicion</label>
         <div className="flex gap-2">
           {(['LONG', 'SHORT'] as const).map(p => (
             <button
@@ -357,7 +341,7 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
                     >
                       {btn.label}
                       <br />
-                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : 'â€”'}</span>
+                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : '—'}</span>
                     </button>
                   ))}
                 </div>
@@ -384,7 +368,7 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
                     >
                       {btn.label}
                       <br />
-                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : 'â€”'}</span>
+                      <span className="text-[8px]">${btn.price > 0 ? fmt(btn.price, 2) : '—'}</span>
                     </button>
                   ))}
                 </div>
@@ -403,7 +387,7 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
                 border: `1px solid ${orderActive ? 'rgba(239,68,68,0.4)' : inputs.position === 'LONG' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
               }}
             >
-              {orderActive ? 'âœ• Cerrar Orden' : `â–¶ Ejecutar Orden ${inputs.position}`}
+              {orderActive ? 'X Cerrar Orden' : `> Ejecutar Orden ${inputs.position}`}
             </button>
           </div>
         )}
@@ -413,11 +397,11 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
       <div className="grid grid-cols-2 gap-2">
         <SummaryCard label="TP sin recompras" value={`$${fmt(result.tpNoRecompra, d)}`} sublabel={`$${fmt(result.tpNoRecompraUsd, 2)} ganancia`} color="#22c55e" />
         <SummaryCard label="Stop Loss" value={`$${fmt(result.lastSl, d)}`} sublabel={`${fmt(result.lastSlPct * 100, 2)}%`} color="#ef4444" />
-        <SummaryCard label="LiquidaciÃ³n" value={`$${fmt(result.liqPrice, d)}`} sublabel={`${fmt(result.liqPct * 100, 2)}%`} color="#f59e0b" />
-        <SummaryCard label="ComisiÃ³n entrada" value={`$${fmt(result.initCom, 4)}`} sublabel={inputs.orderType} color="#9ca3af" />
+        <SummaryCard label="Liquidacion" value={`$${fmt(result.liqPrice, d)}`} sublabel={`${fmt(result.liqPct * 100, 2)}%`} color="#f59e0b" />
+        <SummaryCard label="Comision entrada" value={`$${fmt(result.initCom, 4)}`} sublabel={inputs.orderType} color="#9ca3af" />
       </div>
 
-      {/* Recompra table - MEJORADO para mÃ³vil */}
+      {/* Recompra table */}
       <div className="rounded-2xl p-3" style={{ backgroundColor: '#1e2536' }}>
         <h3 className="text-xs font-bold text-white mb-2">Tabla de Recompras</h3>
         <div className="overflow-x-auto -mx-3 px-3">
@@ -461,13 +445,13 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
         <h3 className="text-xs font-bold text-white mb-2">Comisiones</h3>
         <div className="space-y-1">
           <ComRow label="Entrada + Recompras" value={`$${fmt(result.initCom + result.rows.reduce((s, r) => s + r.comEntry, 0), 4)}`} />
-          <ComRow label="TP Orden LÃ­mite" value={`$${fmt(result.comTpLimit, 4)}`} />
+          <ComRow label="TP Orden Limite" value={`$${fmt(result.comTpLimit, 4)}`} />
           <ComRow label="TP Orden Market" value={`$${fmt(result.comTpMarket, 4)}`} />
         </div>
       </div>
 
       <div className="text-center text-[9px] py-2" style={{ color: '#4b5563' }}>
-        Calculadora v2.0 â€” FÃ³rmula LiquidaciÃ³n Binance
+        Calculadora v2.0 - Formula Liquidacion Binance
       </div>
     </div>
   )
