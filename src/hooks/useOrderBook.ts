@@ -48,8 +48,8 @@ export function generateDefaults(price: number): OrderBookState {
   const longPrices: PriceLevel[] = []
 
   for (let i = 0; i < 16; i++) {
-    shortPrices.push({ price: shortBase + (i + 1) * step, volume: 0 })
-    longPrices.push({ price: longBase - (i + 1) * step, volume: 0 })
+    shortPrices.push({ price: shortBase + (i + 1) * step, volume: 0, rawVolume: 0, usdtVolume: 0 })
+    longPrices.push({ price: longBase - (i + 1) * step, volume: 0, rawVolume: 0, usdtVolume: 0 })
   }
 
   return { shortPrices, longPrices }
@@ -58,12 +58,12 @@ export function generateDefaults(price: number): OrderBookState {
 const DEFAULT_SHORT: PriceLevel[] = [
   79600, 79500, 79400, 79300, 79200, 79100, 79000, 78900, 78800, 78700, 78600,
   78500, 78400, 78300, 78200, 78100,
-].map((p) => ({ price: p, volume: 0 }))
+].map((p) => ({ price: p, volume: 0, rawVolume: 0, usdtVolume: 0 }))
 
 const DEFAULT_LONG: PriceLevel[] = [
   78000, 77900, 77800, 77700, 77600, 77500, 77400, 77300, 77200, 77100, 77000,
   76900, 76800, 76700, 76600, 76500,
-].map((p) => ({ price: p, volume: 0 }))
+].map((p) => ({ price: p, volume: 0, rawVolume: 0, usdtVolume: 0 }))
 
 function loadSaved(): OrderBookState | null {
   try {
@@ -77,10 +77,10 @@ function loadSaved(): OrderBookState | null {
       parsed.longPrices.length > 0
     ) {
       const short = parsed.shortPrices.map((p: number | PriceLevel) =>
-        typeof p === 'number' ? { price: p, volume: 0 } : p,
+        typeof p === 'number' ? { price: p, volume: 0, rawVolume: 0, usdtVolume: 0 } : p,
       )
       const long = parsed.longPrices.map((p: number | PriceLevel) =>
-        typeof p === 'number' ? { price: p, volume: 0 } : p,
+        typeof p === 'number' ? { price: p, volume: 0, rawVolume: 0, usdtVolume: 0 } : p,
       )
       return { shortPrices: short, longPrices: long }
     }
@@ -149,7 +149,7 @@ export function useOrderBook() {
       const step = last > 0 ? getStep(last) : 100
       return {
         ...prev,
-        shortPrices: [...prev.shortPrices, { price: last + step, volume: 0 }],
+        shortPrices: [...prev.shortPrices, { price: last + step, volume: 0, rawVolume: 0, usdtVolume: 0 }],
       }
     })
   }, [])
@@ -160,7 +160,7 @@ export function useOrderBook() {
       const step = last > 0 ? getStep(last) : 100
       return {
         ...prev,
-        longPrices: [...prev.longPrices, { price: last - step, volume: 0 }],
+        longPrices: [...prev.longPrices, { price: last - step, volume: 0, rawVolume: 0, usdtVolume: 0 }],
       }
     })
   }, [])
@@ -233,5 +233,4 @@ export function useOrderBook() {
     removeShortPrice,
     removeLongPrice,
     loadPrices,
-  }
-}
+  
