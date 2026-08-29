@@ -4,18 +4,23 @@ export type DataSource = 'spot' | 'futures'
 
 export interface PriceLevel {
   price: number
-  volume: number
+  volume: number      // normalizado 0-1 (relativo al max del top 16)
+  rawVolume: number   // volumen real en moneda base (qty)
+  usdtVolume: number  // volumen aproximado en USDT (qty * price)
 }
 
 export interface FetchResult {
   shortPrices: PriceLevel[]
   longPrices: PriceLevel[]
   currentPrice: number
+  totalShortVol: number   // total USDT en asks
+  totalLongVol: number    // total USDT en bids
 }
 
 interface AggregatedLevel {
   price: number
   qty: number
+  usdt: number
 }
 
 const COUNT = 16
@@ -40,31 +45,38 @@ function aggregateByStep(
   levels: [string, string][],
   step: number,
 ): PriceLevel[] {
-  const buckets = new Map<number, number>()
+  const buckets = new Map<number, AggregatedLevel>()
 
   for (const [priceStr, qtyStr] of levels) {
     const price = parseFloat(priceStr)
     const qty = parseFloat(qtyStr)
     const rounded = Math.round(price / step) * step
     const key = parseFloat(rounded.toPrecision(10))
-    buckets.set(key, (buckets.get(key) ?? 0) + qty)
+    const existing = buckets.get(key)
+    if (existing) {
+      existing.qty += qty
+      existing.usdt += qty * price
+    } else {
+      buckets.set(key, { price: key, qty, usdt: qty * price })
+    }
   }
 
-  const sorted: AggregatedLevel[] = []
-  for (const [price, qty] of buckets) {
-    sorted.push({ price, qty })
-  }
+  const sorted: AggregatedLevel[] = Array.from(buckets.values())
   sorted.sort((a, b) => b.qty - a.qty)
 
   const top = sorted.slice(0, COUNT)
-  const maxVol = Math.max(...top.map((l) => l.qty))
+  const maxVol = Math.max(...top.map((l) => l.qty), 1)
+  const totalUsdt = top.reduce((sum, l) => sum + l.usdt, 0)
 
   return top
     .sort((a, b) => b.price - a.price)
     .map((l) => ({
       price: l.price,
       volume: maxVol > 0 ? l.qty / maxVol : 0,
-    }))
+      rawVolume: l.qty,
+      usdtVolume: l.usdt,
+    })),
+    // totalUsdt no se usa aquí directamente, se calcula fuera
 }
 
 export function useOrderBookFetch(symbol: string, source: DataSource) {
@@ -77,7 +89,7 @@ export function useOrderBookFetch(symbol: string, source: DataSource) {
 
     const depthUrl = source === 'futures'
       ? `${FUTURES_DEPTH}?symbol=${symbol}&limit=1000`
-      : `${SPOT_DEPTH}?symbol=${symbol}&limit=5000`
+      : `${SPOT_DEPTH}?symbol=${symbol}&limit=1000`  // FIX: 5000 no soportado sin auth, usar 1000
     const tickerUrl = source === 'futures'
       ? `${FUTURES_TICKER}?symbol=${symbol}`
       : `${SPOT_TICKER}?symbol=${symbol}`
@@ -98,10 +110,18 @@ export function useOrderBookFetch(symbol: string, source: DataSource) {
       const askStep = calcStep(asks)
       const bidStep = calcStep(bids)
 
+      const shortPrices = aggregateByStep(asks, askStep)
+      const longPrices = aggregateByStep(bids, bidStep)
+
+      const totalShortVol = shortPrices.reduce((a, b) => a + b.usdtVolume, 0)
+      const totalLongVol = longPrices.reduce((a, b) => a + b.usdtVolume, 0)
+
       return {
-        shortPrices: aggregateByStep(asks, askStep),
-        longPrices: aggregateByStep(bids, bidStep),
+        shortPrices,
+        longPrices,
         currentPrice: parseFloat(tickerJson.price),
+        totalShortVol,
+        totalLongVol,
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'

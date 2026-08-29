@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { CandlestickChart } from './CandlestickChart'
 import type { Kline, OverlayLine, ActiveOrder } from './CandlestickChart'
 import { IconRefresh } from './Icons'
+import type { DataSource } from './useOrderBookFetch'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 type Interval = (typeof INTERVALS)[number]
@@ -18,9 +19,10 @@ interface ChartScreenProps {
   dataSourceLabel?: string
   activeOrder?: ActiveOrder | null
   fundingRate?: number | null
+  dataSource?: DataSource
 }
 
-export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourceLabel, activeOrder, fundingRate }: ChartScreenProps) {
+export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourceLabel, activeOrder, fundingRate, dataSource = 'spot' }: ChartScreenProps) {
   const [interval, setInterval_] = useState<Interval>(() => {
     const saved = localStorage.getItem('ob_chartInterval')
     return (saved && INTERVALS.includes(saved as Interval)) ? saved as Interval : '1h'
@@ -36,6 +38,9 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
   const base = symbol.replace('USDT', '')
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dataSourceRef = useRef(dataSource)
+
+  useEffect(() => { dataSourceRef.current = dataSource }, [dataSource])
 
   useEffect(() => {
     const check = () => setIsLandscape(window.innerWidth > window.innerHeight)
@@ -48,7 +53,11 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`)
+      const src = dataSourceRef.current
+      const baseUrl = src === 'futures'
+        ? 'https://fapi.binance.com/fapi/v1/klines'
+        : 'https://data-api.binance.vision/api/v3/klines'
+      const res = await fetch(`${baseUrl}?symbol=${symbol}&interval=${interval}&limit=200`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: unknown[][] = await res.json()
       const parsed: Kline[] = data.map((d) => ({
@@ -68,9 +77,20 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
   }, [symbol, interval])
 
   const connectWebSocket = useCallback(() => {
+    // Limpiar reconexiones anteriores
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+
     const symLower = symbol.toLowerCase()
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symLower}@kline_${interval}`)
+    const src = dataSourceRef.current
+    const wsUrl = src === 'futures'
+      ? `wss://fstream.binance.com/ws/${symLower}@kline_${interval}`
+      : `wss://stream.binance.com:9443/ws/${symLower}@kline_${interval}`
+
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
     ws.onopen = () => { setIsLive(true); setError(null) }
     ws.onmessage = (event) => {
@@ -106,8 +126,11 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
   useEffect(() => {
     fetchKlines().then(() => connectWebSocket())
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
     }
   }, [symbol, interval, fetchKlines, connectWebSocket])
 
@@ -172,4 +195,3 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
     </div>
   )
 }
-

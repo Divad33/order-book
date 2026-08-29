@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
-import { useOrderBook, loadHistory, saveHistory } from './hooks/useOrderBook'
+import { useOrderBook, loadHistory, saveHistory, generateDefaults } from './hooks/useOrderBook'
 import type { HistoryEntry } from './hooks/useOrderBook'
 import { useOrderBookFetch } from './hooks/useOrderBookFetch'
 import { useLivePrice } from './hooks/useLivePrice'
@@ -34,6 +34,12 @@ interface OrderHistoryEntry {
   result: 'tp' | 'sl' | 'manual'
 }
 
+interface Toast {
+  id: string
+  message: string
+  type: 'success' | 'error' | 'info' | 'warning'
+}
+
 function App() {
   const {
     shortPrices,
@@ -54,7 +60,7 @@ function App() {
     return (localStorage.getItem('ob_dataSource') as DataSource) || 'spot'
   })
   const { fetchOrderBook, loading, error } = useOrderBookFetch(symbol, dataSource)
-  const { ticker, isConnected: priceConnected } = useLivePrice(symbol)
+  const { ticker, isConnected: priceConnected } = useLivePrice(symbol, dataSource)
 
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -66,14 +72,34 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
 
-  // Sync currentPrice from live WebSocket ticker
+  // FIX: Throttle lastUpdate para evitar re-renders constantes del WebSocket
+  const lastUpdateRef = useRef<string | null>(null)
   useEffect(() => {
     if (ticker) {
       setCurrentPrice(ticker.price)
-      setLastUpdate(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      lastUpdateRef.current = now
     }
   }, [ticker])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (lastUpdateRef.current) setLastUpdate(lastUpdateRef.current)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   const [activeTab, setActiveTab] = useState<TabId>('orderbook')
+
+  // Toast system (reemplaza alert() nativo)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+    const id = Date.now().toString() + Math.random().toString(36).slice(2)
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4000)
+  }, [])
 
   // Alert state
   const [alertPrice, setAlertPrice] = useState<number | null>(null)
@@ -93,7 +119,7 @@ function App() {
     }
   })
 
-  // Dominance state
+  // Dominance state (FIX: ahora usa volumen real en USDT)
   const [dominance, setDominance] = useState<{ buyPct: number; sellPct: number } | null>(null)
 
   // Calculator state for chart overlay
@@ -114,7 +140,7 @@ function App() {
           setFundingRate(parseFloat(data.lastFundingRate))
         }
       } catch {
-        // Funding rate not available (e.g. error 451 for some regions)
+        // Funding rate not available
       }
     }
     fetchFunding()
@@ -126,6 +152,7 @@ function App() {
   const [calcNotifications, setCalcNotifications] = useState<CalcNotification[]>([])
   const [orderActive, setOrderActive] = useState(false)
   const [orderStartPrice, setOrderStartPrice] = useState<number | null>(null)
+  const orderOpenTimeRef = useRef<string>('')
 
   // Order history
   const [orderHistory, setOrderHistory] = useState<OrderHistoryEntry[]>(() => {
@@ -145,6 +172,7 @@ function App() {
     if (active) {
       setOrderActive(true)
       setOrderStartPrice(currentPrice)
+      orderOpenTimeRef.current = new Date().toISOString()
     } else {
       // Save order to history when closing
       if (calcResult && calcResult.entryPrice > 0) {
@@ -171,7 +199,7 @@ function App() {
           slPrice: calcResult.lastSl,
           numCoins: calcResult.numCoins,
           leverage: calcResult.leverage,
-          openTime: orderStartPrice ? new Date().toISOString() : new Date().toISOString(),
+          openTime: orderOpenTimeRef.current || new Date().toISOString(),
           closeTime: new Date().toISOString(),
           closePrice: closeP,
           pnlUsd,
@@ -182,8 +210,9 @@ function App() {
       }
       setOrderActive(false)
       setOrderStartPrice(null)
+      orderOpenTimeRef.current = ''
     }
-  }, [calcResult, currentPrice, symbol, orderStartPrice])
+  }, [calcResult, currentPrice, symbol])
 
   // Save data source preference
   useEffect(() => {
@@ -209,6 +238,7 @@ function App() {
     })
   }, [])
 
+  // FIX: Cerrar AudioContext después de reproducir para evitar memory leak
   const playAlertSound = useCallback(() => {
     if (!alertSound) return
     try {
@@ -225,6 +255,10 @@ function App() {
       oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2)
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5)
       oscillator.stop(audioCtx.currentTime + 0.5)
+      // Cerrar el contexto después de 1 segundo
+      setTimeout(() => {
+        if (audioCtx.state !== 'closed') audioCtx.close()
+      }, 1000)
     } catch {
       // Audio not available
     }
@@ -238,6 +272,12 @@ function App() {
     calcResultRef.current = calcResult
   }, [calcResult])
 
+  // FIX: Limpiar notificaciones al cambiar de símbolo
+  useEffect(() => {
+    calcNotifiedRef.current = new Set()
+    prevCalcKeyRef.current = ''
+  }, [symbol])
+
   const checkCalcLevels = useCallback((price: number) => {
     const cr = calcResultRef.current
     if (!cr || cr.entryPrice <= 0) return
@@ -248,7 +288,8 @@ function App() {
       prevCalcKeyRef.current = calcKey
     }
 
-    const threshold = price * 0.001
+    // FIX: Threshold basado en el tick size aproximado (0.05% del precio, mínimo 0.01)
+    const threshold = Math.max(price * 0.0005, 0.01)
     const levels: { id: string; price: number; label: string; type: 'entry' | 'tp' | 'sl' | 'recompra' | 'liq' }[] = [
       { id: 'calc_entry', price: cr.entryPrice, label: 'Entrada', type: 'entry' },
       { id: 'calc_tp', price: cr.tpNoRecompra, label: 'Take Profit', type: 'tp' },
@@ -277,22 +318,27 @@ function App() {
     }
   }, [playAlertSound])
 
+  // FIX: checkCalcLevels se ejecuta también con el precio en tiempo real (WebSocket)
+  const prevPriceCheckRef = useRef<number>(0)
+  useEffect(() => {
+    if (currentPrice === null) return
+    // Solo verificar si el precio cambió significativamente (> 0.01%)
+    if (Math.abs(currentPrice - prevPriceCheckRef.current) / currentPrice > 0.0001) {
+      checkCalcLevels(currentPrice)
+      prevPriceCheckRef.current = currentPrice
+    }
+  }, [currentPrice, checkCalcLevels])
+
   const handleFetch = useCallback(async () => {
     const result = await fetchOrderBook()
     if (result) {
       loadPrices(result.shortPrices, result.longPrices)
-      setCurrentPrice(result.currentPrice)
-      setLastUpdate(
-        new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        }),
-      )
+      // FIX: No actualizar currentPrice desde el fetch (el WebSocket es la fuente de verdad)
+      // setCurrentPrice(result.currentPrice)  ← ELIMINADO
 
-      // Calculate dominance from volumes
-      const totalBuyVol = result.longPrices.reduce((a, b) => a + b.volume, 0)
-      const totalSellVol = result.shortPrices.reduce((a, b) => a + b.volume, 0)
+      // FIX: Dominancia calculada con volumen real en USDT
+      const totalBuyVol = result.totalLongVol
+      const totalSellVol = result.totalShortVol
       const total = totalBuyVol + totalSellVol
       if (total > 0) {
         setDominance({
@@ -327,9 +373,7 @@ function App() {
         return next
       })
 
-      // Check calc order levels
-      checkCalcLevels(result.currentPrice)
-
+      // Alerta de precio (usando toast en vez de alert nativo)
       if (alertPrice !== null) {
         const triggered =
           alertDirection === 'above'
@@ -338,14 +382,15 @@ function App() {
         if (triggered) {
           if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
           playAlertSound()
-          alert(
+          showToast(
             `${symbol.replace('USDT', '')} llegó a $${result.currentPrice.toLocaleString()} (alerta: ${alertDirection === 'above' ? '≥' : '≤'} $${alertPrice.toLocaleString()})`,
+            'warning'
           )
           setAlertPrice(null)
         }
       }
     }
-  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection, playAlertSound, checkCalcLevels])
+  }, [fetchOrderBook, loadPrices, symbol, alertPrice, alertDirection, playAlertSound, showToast])
 
   const fetchRef = useRef(handleFetch)
   useEffect(() => {
@@ -396,9 +441,9 @@ function App() {
     if (navigator.share) {
       navigator.share({ title: `Order Book ${base}/USDT`, text }).catch(() => {})
     } else {
-      navigator.clipboard.writeText(text).then(() => alert('Datos copiados al portapapeles'))
+      navigator.clipboard.writeText(text).then(() => showToast('Datos copiados al portapapeles', 'success'))
     }
-  }, [symbol, dataSource, currentPrice, computed, shortPrices, longPrices])
+  }, [symbol, dataSource, currentPrice, computed, shortPrices, longPrices, showToast])
 
   const base = symbol.replace('USDT', '')
 
@@ -724,7 +769,16 @@ function App() {
   const renderChart = () => (
     <div className="flex-1 flex flex-col">
       <Suspense fallback={<div className="flex-1 flex items-center justify-center" style={{ background: '#141821' }}><span className="text-gray-500">Cargando gráfico...</span></div>}>
-        <ChartScreen symbol={symbol} onClose={() => setActiveTab('orderbook')} embedded overlayLines={chartOverlayLines} dataSourceLabel={sourceLabel} activeOrder={orderActive && calcResult ? { calc: calcResult, currentPrice: currentPrice ?? 0 } : null} fundingRate={fundingRate} />
+        <ChartScreen
+          symbol={symbol}
+          onClose={() => setActiveTab('orderbook')}
+          embedded
+          overlayLines={chartOverlayLines}
+          dataSourceLabel={sourceLabel}
+          activeOrder={orderActive && calcResult ? { calc: calcResult, currentPrice: currentPrice ?? 0 } : null}
+          fundingRate={fundingRate}
+          dataSource={dataSource}
+        />
       </Suspense>
     </div>
   )
@@ -1168,13 +1222,29 @@ function App() {
 
       {/* Info */}
       <div className="text-center text-[10px] py-2" style={{ color: '#6b7280' }}>
-        Order Book v3.0 — Binance {sourceLabel}
+        Order Book v3.1 — Binance {sourceLabel}
       </div>
     </div>
   )
 
   return (
-    <div className="h-screen bg-[#141821] text-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#141821] text-white flex flex-col overflow-hidden relative">
+      {/* Toast Notifications */}
+      <div className="fixed top-4 left-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(t => {
+          const bg = t.type === 'success' ? 'rgba(34,197,94,0.9)' : t.type === 'error' ? 'rgba(239,68,68,0.9)' : t.type === 'warning' ? 'rgba(245,158,11,0.9)' : 'rgba(59,130,246,0.9)'
+          return (
+            <div
+              key={t.id}
+              className="rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg pointer-events-auto animate-[slideIn_0.3s_ease-out]"
+              style={{ backgroundColor: bg }}
+            >
+              {t.message}
+            </div>
+          )
+        })}
+      </div>
+
       {/* Content */}
       {activeTab === 'orderbook' && renderOrderBook()}
       {activeTab === 'chart' && renderChart()}

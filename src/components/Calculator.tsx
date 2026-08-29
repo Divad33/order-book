@@ -16,6 +16,7 @@ export interface CalcInputs {
   orderType: OrderType
   capital: number
   decimals: number
+  mmRate: number  // Maintenance Margin Rate (ej. 0.005 = 0.5%)
 }
 
 export interface RecompraRow {
@@ -54,12 +55,14 @@ function loadSaved(): CalcInputs {
     orderType: 'LIMITE',
     capital: 162.31,
     decimals: 5,
+    mmRate: 0.005,
   }
 }
 
 function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; tpNoRecompraUsd: number; lastSl: number; lastSlPct: number; liqPrice: number; liqPct: number; initCom: number; comTpLimit: number; comTpMarket: number } {
-  const { position, rebuyPct, coinPct, stopLossUsd, entryPrice, numCoins, takeProfitPct, leverage, capital } = inp
+  const { position, rebuyPct, coinPct, stopLossUsd, entryPrice, numCoins, takeProfitPct, leverage, capital, mmRate } = inp
   const isShort = position === 'SHORT'
+  const imRate = 1 / leverage  // Initial Margin Rate
 
   // Initial TP (no recompras) based on entry price
   const tpNoRecompra = isShort
@@ -73,10 +76,19 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
   const comTpLimit = tpNoRecompra * numCoins * 0.0002
   const comTpMarket = tpNoRecompra * numCoins * 0.0004
 
-  // Initial liquidation price
-  const initLiq = isShort
-    ? (100 * capital + entryPrice * numCoins * 100) / (numCoins * 101)
-    : (-100 * capital + entryPrice * numCoins * 100) / (99 * numCoins)
+  // FIX: Fórmula de liquidación de Binance Futures (Isolated Margin, simplificada)
+  // Liq = Entry * (1 ± IMRate ∓ MMRate)
+  const calcLiq = (ep: number, tc: number) => {
+    const notional = ep * tc
+    const maintMargin = notional * mmRate
+    if (isShort) {
+      return (notional + capital * leverage - maintMargin) / tc
+    } else {
+      return (notional - capital * leverage + maintMargin) / tc
+    }
+  }
+
+  const initLiq = calcLiq(entryPrice, numCoins)
 
   // Build recompra chain (up to 9)
   const rows: RecompraRow[] = []
@@ -106,12 +118,13 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
       ? stopLossUsd / totalCoins + avgEntry
       : avgEntry - stopLossUsd / totalCoins
 
-    // TP price (based on previous avg entry for recompras, or entry for first)
+    // FIX: TP price basado en el avgEntry anterior (no en entryPrice para recompras)
     const tpBase = i === 1 ? entryPrice : prevAvgEntry
     const tpPrice = isShort
       ? tpBase * (1 - takeProfitPct / 100)
       : tpBase * (1 + takeProfitPct / 100)
-    const tpUsd = (i === 1 ? prevTotalCoins : prevTotalCoins) * (i === 1 ? entryPrice : prevAvgEntry) * (takeProfitPct / 100)
+    // FIX: tpUsd usa prevTotalCoins correctamente (sin condición ternaria redundante)
+    const tpUsd = prevTotalCoins * tpBase * (takeProfitPct / 100)
 
     // USDT used
     const usdtUsed = totalCoins * avgEntry / leverage
@@ -122,10 +135,8 @@ function compute(inp: CalcInputs): { rows: RecompraRow[]; tpNoRecompra: number; 
     const comTpLimitRow = tpPrice * totalCoins * 0.0002
     const comTpMarketRow = tpPrice * totalCoins * 0.0004
 
-    // Liquidation price
-    const liqPrice = isShort
-      ? (100 * capital + avgEntry * totalCoins * 100) / (totalCoins * 101)
-      : (-100 * capital + avgEntry * totalCoins * 100) / (99 * totalCoins)
+    // FIX: Liquidación con fórmula de Binance
+    const liqPrice = calcLiq(avgEntry, totalCoins)
 
     rows.push({
       num: i,
@@ -294,12 +305,13 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
           <InputField label="Precio Entrada $" value={inputs.entryPrice} onChange={v => update('entryPrice', v)} />
           <InputField label="# Monedas" value={inputs.numCoins} onChange={v => update('numCoins', v)} />
           <InputField label="Capital $" value={inputs.capital} onChange={v => update('capital', v)} />
-          <InputField label="Apalancamiento" value={inputs.leverage} onChange={v => update('leverage', v)} suffix="x" />
+          <InputField label="Apalancamiento" value={inputs.leverage} onChange={v => update('leverage', Math.min(Math.max(1, v), 125))} suffix="x" />
           <InputField label="Recompra %" value={inputs.rebuyPct} onChange={v => update('rebuyPct', v)} />
           <InputField label="Moneda %" value={inputs.coinPct} onChange={v => update('coinPct', v)} />
           <InputField label="Stop Loss $" value={inputs.stopLossUsd} onChange={v => update('stopLossUsd', v)} />
           <InputField label="Take Profit %" value={inputs.takeProfitPct} onChange={v => update('takeProfitPct', v)} />
-          <InputField label="# Decimales" value={inputs.decimals} onChange={v => update('decimals', v)} />
+          <InputField label="# Decimales" value={inputs.decimals} onChange={v => update('decimals', Math.min(Math.max(0, v), 8))} />
+          <InputField label="MM Rate %" value={inputs.mmRate * 100} onChange={v => update('mmRate', Math.max(0, v) / 100)} suffix="%" />
           <div>
             <label className="text-[10px] font-medium mb-1 block" style={{ color: '#9ca3af' }}>Tipo Orden</label>
             <div className="flex gap-1">
@@ -406,11 +418,11 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
         <SummaryCard label="Comisión entrada" value={`$${fmt(result.initCom, 4)}`} sublabel={inputs.orderType} color="#9ca3af" />
       </div>
 
-      {/* Recompra table */}
+      {/* Recompra table - MEJORADO para móvil */}
       <div className="rounded-2xl p-3" style={{ backgroundColor: '#1e2536' }}>
         <h3 className="text-xs font-bold text-white mb-2">Tabla de Recompras</h3>
         <div className="overflow-x-auto -mx-3 px-3">
-          <table className="w-full text-[10px]" style={{ minWidth: 700 }}>
+          <table className="w-full text-[10px]" style={{ minWidth: 600 }}>
             <thead>
               <tr style={{ color: '#9ca3af' }}>
                 <th className="text-left py-1 pr-2">#</th>
@@ -456,7 +468,7 @@ export function Calculator({ orderBookPrices, onCalcResult, onOrderActive, notif
       </div>
 
       <div className="text-center text-[9px] py-2" style={{ color: '#4b5563' }}>
-        Calculadora
+        Calculadora v2.0 — Fórmula Liquidación Binance
       </div>
     </div>
   )

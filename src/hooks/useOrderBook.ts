@@ -29,6 +29,32 @@ export interface HistoryEntry {
 const STORAGE_KEY = 'order-book-state'
 const HISTORY_KEY = 'order-book-history'
 
+function getStep(price: number): number {
+  if (price >= 50000) return 100
+  if (price >= 10000) return 50
+  if (price >= 1000) return 10
+  if (price >= 100) return 1
+  if (price >= 10) return 0.1
+  if (price >= 1) return 0.01
+  return 0.001
+}
+
+export function generateDefaults(price: number): OrderBookState {
+  const step = getStep(price)
+  const shortBase = Math.ceil(price / step) * step
+  const longBase = Math.floor(price / step) * step
+
+  const shortPrices: PriceLevel[] = []
+  const longPrices: PriceLevel[] = []
+
+  for (let i = 0; i < 16; i++) {
+    shortPrices.push({ price: shortBase + (i + 1) * step, volume: 0 })
+    longPrices.push({ price: longBase - (i + 1) * step, volume: 0 })
+  }
+
+  return { shortPrices, longPrices }
+}
+
 const DEFAULT_SHORT: PriceLevel[] = [
   79600, 79500, 79400, 79300, 79200, 79100, 79000, 78900, 78800, 78700, 78600,
   78500, 78400, 78300, 78200, 78100,
@@ -50,7 +76,6 @@ function loadSaved(): OrderBookState | null {
       parsed.shortPrices.length > 0 &&
       parsed.longPrices.length > 0
     ) {
-      // migrate from old format (number[]) to PriceLevel[]
       const short = parsed.shortPrices.map((p: number | PriceLevel) =>
         typeof p === 'number' ? { price: p, volume: 0 } : p,
       )
@@ -117,12 +142,14 @@ export function useOrderBook() {
     })
   }, [])
 
+  // FIX: Los shorts (asks/resistencias) deben ir HACIA ARRIBA del precio
   const addShortPrice = useCallback(() => {
     setState((prev) => {
       const last = prev.shortPrices[prev.shortPrices.length - 1]?.price ?? 0
+      const step = last > 0 ? getStep(last) : 100
       return {
         ...prev,
-        shortPrices: [...prev.shortPrices, { price: last - 100, volume: 0 }],
+        shortPrices: [...prev.shortPrices, { price: last + step, volume: 0 }],
       }
     })
   }, [])
@@ -130,9 +157,10 @@ export function useOrderBook() {
   const addLongPrice = useCallback(() => {
     setState((prev) => {
       const last = prev.longPrices[prev.longPrices.length - 1]?.price ?? 0
+      const step = last > 0 ? getStep(last) : 100
       return {
         ...prev,
-        longPrices: [...prev.longPrices, { price: last - 100, volume: 0 }],
+        longPrices: [...prev.longPrices, { price: last - step, volume: 0 }],
       }
     })
   }, [])
