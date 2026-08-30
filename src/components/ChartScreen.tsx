@@ -88,7 +88,7 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
     const src = dataSourceRef.current
     const wsUrl = src === 'futures'
       ? `wss://fstream.binance.com/ws/${symLower}@kline_${interval}`
-      : `wss://stream.binance.com:9443/ws/${symLower}@kline_${interval}`
+      : `wss://data-stream.binance.vision/ws/${symLower}@kline_${interval}`
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
