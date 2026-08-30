@@ -134,6 +134,21 @@ export function ChartScreen({ symbol, onClose, embedded, overlayLines, dataSourc
     }
   }, [symbol, interval, fetchKlines, connectWebSocket])
 
+  // Al volver del background (app minimizada, pantalla apagada), el WebView
+  // de Android puede pausar JS y dejar el WS en un estado "zombie": la red
+  // ya está muerta pero readyState puede seguir marcando OPEN porque nunca
+  // se disparó onclose mientras el JS estaba congelado. Por eso forzamos
+  // reconexión siempre al volver visible, sin confiar en readyState.
+  // connectWebSocket() ya cierra el socket anterior de forma segura.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      fetchKlines().then(() => connectWebSocket())
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [fetchKlines, connectWebSocket])
+
   const changeUp = priceChange !== null && priceChange >= 0
 
   const liveBadge = (
